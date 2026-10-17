@@ -24,7 +24,8 @@ async function taken(field, value, exceptId = 0) {
 }
 
 account.post("/auth/register", authLimit, ah(async (req, res) => {
-  const b = parse(z.object({ email: zEmail, password: zPassword, name: zName, handle: zHandle, lang: z.enum(["es", "en"]).optional() }), req.body);
+  const b = parse(z.object({ email: zEmail, password: zPassword, name: zName, handle: zHandle, lang: z.enum(["es", "en"]).optional(),
+    adult: z.literal(true, { error: "Tienes que confirmar que eres mayor de edad." }) }), req.body);
   if (await taken("email", b.email)) throw bad("email_taken", "Ya hay una cuenta con ese correo.");
   if (await taken("handle", b.handle)) throw bad("handle_taken", "Ese usuario ya está en uso.");
   const user = await one("insert into users (email, password_hash, name, handle, lang) values ($1, $2, $3, $4, $5) returning *",

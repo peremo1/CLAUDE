@@ -52,13 +52,15 @@ test("rechaza cambios sin la cabecera anti-CSRF", async () => {
 });
 
 test("registro, sesión y errores de validación", async () => {
-  const r = await fan.post("/api/auth/register").send({ email: "Mika@Test.dev", password: "mika12345", name: "Mika", handle: "@mika" }).expect(201);
+  const r = await fan.post("/api/auth/register").send({ email: "Mika@Test.dev", password: "mika12345", name: "Mika", handle: "@mika", adult: true }).expect(201);
   assert.equal(r.body.user.handle, "mika");
   assert.equal(r.body.user.email, "mika@test.dev");
-  await other.post("/api/auth/register").send({ email: "lune@test.dev", password: "lune12345", name: "Lune", handle: "lune" }).expect(201);
-  const dup = await guest.post("/api/auth/register").send({ email: "mika@test.dev", password: "otra12345", name: "M", handle: "otra" }).expect(400);
+  await other.post("/api/auth/register").send({ email: "lune@test.dev", password: "lune12345", name: "Lune", handle: "lune", adult: true }).expect(201);
+  const dup = await guest.post("/api/auth/register").send({ email: "mika@test.dev", password: "otra12345", name: "M", handle: "otra", adult: true }).expect(400);
   assert.equal(dup.body.error, "email_taken");
-  const shortPw = await guest.post("/api/auth/register").send({ email: "n@test.dev", password: "123", name: "N", handle: "nn" }).expect(400);
+  const shortPw = await guest.post("/api/auth/register").send({ email: "n@test.dev", password: "123", name: "N", handle: "nn", adult: true }).expect(400);
+  const noAdult = await guest.post("/api/auth/register").send({ email: "n@test.dev", password: "12345678", name: "N", handle: "nn" }).expect(400);
+  assert.ok(noAdult.body.fields.adult);
   assert.ok(shortPw.body.fields.password);
   await guest.post("/api/auth/login").send({ email: "mika@test.dev", password: "mal" }).expect(401);
   const me = await fan.get("/api/auth/me").expect(200);
@@ -218,6 +220,9 @@ test("panel: colecciones, etiquetas, eventos, redes y edición de obras", async 
   assert.deepEqual([cols[0].name, cols[0].count], [{ es: "Bocetos", en: "Sketches" }, 1]);
   const w = (await guest.get(`/api/works/${workId}`)).body.work;
   assert.deepEqual([w.nsfw, w.tags, w.collectionId], [true, ["boceto"], col.id]);
+  await artist.patch(`/api/works/${workId}`).field("collectionId", "").expect(200);
+  assert.equal((await guest.get(`/api/works/${workId}`)).body.work.collectionId, null);
+  await artist.patch(`/api/works/${workId}`).field("collectionId", String(col.id)).expect(200);
   await artist.delete(`/api/collections/${col.id}`).expect(200);
   assert.equal((await guest.get(`/api/works/${workId}`)).body.work.collectionId, null);
 

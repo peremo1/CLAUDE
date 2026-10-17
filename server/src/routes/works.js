@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { publicUser, requireArtist, requireUser } from "../auth.js";
 import { many, one, q, tx } from "../db.js";
-import { ah, bad, forbidden, idParam, notFound, parse, zBool, zI18n, zIntish, zJson } from "../http.js";
+import { ah, bad, forbidden, idParam, notFound, parse, zBool, zI18n, zJson } from "../http.js";
 import { refreshOg, removeWorkImage, saveWorkImage, upload, workImageUrls } from "../media.js";
 import { notify, notifyMentions } from "../notify.js";
 
@@ -53,7 +53,8 @@ const workFields = z.object({
   desc: zJson(zI18n(2000)).optional(),
   nsfw: zBool.optional(),
   allowComments: zBool.optional(),
-  collectionId: zIntish.nullable().optional(),
+  // "" o "null" quitan la colección; sin el campo no se toca.
+  collectionId: z.preprocess(v => (v === "" || v === "null" ? null : v === undefined ? undefined : Number(v)), z.number().int().positive().nullable().optional()),
   tags: zJson(z.array(z.string().trim().toLowerCase().min(1).max(40)).max(20)).optional(),
   featured: zBool.optional(),
 });
