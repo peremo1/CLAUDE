@@ -9,6 +9,8 @@ const dbUrl = process.env.TEST_DATABASE_URL;
 if (!dbUrl) throw new Error("Define TEST_DATABASE_URL para ejecutar las pruebas (se borrará esa base de datos).");
 process.env.DATABASE_URL = dbUrl;
 process.env.MEDIA_DIR = await fs.mkdtemp(path.join(os.tmpdir(), "zaber-media-"));
+process.env.AUTH_RATE_LIMIT = "1000";
+process.env.MAIL_OUTBOX_DIR = path.join(process.env.MEDIA_DIR, "outbox");
 
 const { default: request } = await import("supertest");
 const { default: sharp } = await import("sharp");
@@ -34,6 +36,7 @@ async function photo(color = "#a42fcb") {
 }
 
 let artist, fan, other, guest, workId;
+const lastEmails = async to => (await pool.query("select * from email_outbox where to_email = $1 order by id desc", [to])).rows;
 
 before(async () => {
   await pool.query("drop schema public cascade; create schema public;");
@@ -45,7 +48,7 @@ before(async () => {
   await artist.post("/api/auth/login").send({ email: "zaber@test.dev", password: "artista123" }).expect(200);
 });
 
-after(async () => { await pool.end(); await fs.rm(process.env.MEDIA_DIR, { recursive: true, force: true }); });
+after(async () => { await new Promise(r => setTimeout(r, 200)); await pool.end(); await fs.rm(process.env.MEDIA_DIR, { recursive: true, force: true }); });
 
 test("rechaza cambios sin la cabecera anti-CSRF", async () => {
   await request(app).post("/api/auth/register").send({ email: "x@x.dev", password: "12345678", name: "X", handle: "xx" }).expect(403);
@@ -188,7 +191,8 @@ test("mensajes privados entre la artista y cada persona", async () => {
 test("perfil: datos, contraseña, foto y preferencias", async () => {
   const r = await fan.patch("/api/me").send({ name: "Mika R", bio: "hola", prefs: { blur: false } }).expect(200);
   assert.equal(r.body.user.prefs.blur, false);
-  assert.equal(r.body.user.prefs.mail, true);
+  assert.equal(r.body.user.prefs.mail_comms, true);
+  assert.equal(r.body.user.prefs.mail_social, false);
   await fan.patch("/api/me").send({ handle: "lune" }).expect(400);
   await fan.patch("/api/me/password").send({ current: "mal", next: "nueva12345" }).expect(400);
   await fan.patch("/api/me/password").send({ current: "mika12345", next: "nueva12345" }).expect(200);
@@ -199,16 +203,31 @@ test("perfil: datos, contraseña, foto y preferencias", async () => {
   assert.deepEqual(users.body.users.map(u => u.handle), ["lune"]);
 });
 
-test("recuperar contraseña con enlace de un solo uso", async () => {
-  const logs = [];
-  const orig = console.log; console.log = (...a) => logs.push(a.join(" "));
+test("recuperar contraseña con código de 6 dígitos", async () => {
   await guest.post("/api/auth/forgot").send({ email: "lune@test.dev" }).expect(200);
   await guest.post("/api/auth/forgot").send({ email: "nadie@test.dev" }).expect(200);
-  console.log = orig;
-  const token = logs.join("\n").match(/#reset-([\w-]+)/)[1];
-  await guest.post("/api/auth/reset").send({ token, password: "lune-nueva-1" }).expect(200);
-  await guest.post("/api/auth/reset").send({ token, password: "otra-vez-12" }).expect(400);
+  const mails = await lastEmails("lune@test.dev");
+  assert.equal(mails.length, 1);
+  assert.equal(mails[0].subject, "Código para cambiar tu contraseña");
+  const code = mails[0].text.match(/\b(\d{6})\b/)[1];
+  // Pedirlo otra vez en menos de un minuto no manda otro correo.
+  await guest.post("/api/auth/forgot").send({ email: "lune@test.dev" }).expect(200);
+  assert.equal((await lastEmails("lune@test.dev")).length, 1);
+  const wrong = code === "000000" ? "111111" : "000000";
+  const bad = await guest.post("/api/auth/reset").send({ email: "lune@test.dev", code: wrong, password: "lune-nueva-1" }).expect(400);
+  assert.equal(bad.body.error, "bad_code");
+  await guest.post("/api/auth/reset").send({ email: "lune@test.dev", code, password: "lune-nueva-1" }).expect(200);
+  await guest.post("/api/auth/reset").send({ email: "lune@test.dev", code, password: "otra-vez-12" }).expect(400);
   await request(app).post("/api/auth/login").set(H).send({ email: "lune@test.dev", password: "lune-nueva-1" }).expect(200);
+});
+
+test("el código se bloquea tras 5 intentos fallidos", async () => {
+  await pool.query("delete from password_codes");
+  await guest.post("/api/auth/forgot").send({ email: "lune@test.dev" }).expect(200);
+  const code = (await lastEmails("lune@test.dev"))[0].text.match(/\b(\d{6})\b/)[1];
+  const wrong = code === "000000" ? "111111" : "000000";
+  for (let i = 0; i < 5; i++) await guest.post("/api/auth/reset").send({ email: "lune@test.dev", code: wrong, password: "x-12345678" }).expect(400);
+  await guest.post("/api/auth/reset").send({ email: "lune@test.dev", code, password: "x-12345678" }).expect(400);
 });
 
 test("panel: colecciones, etiquetas, eventos, redes y edición de obras", async () => {
@@ -262,4 +281,97 @@ test("borrar una obra elimina sus archivos", async () => {
   await artist.delete(`/api/works/${workId}`).expect(200);
   await request(app).get(w.image.full).expect(404);
   await guest.get(`/api/works/${workId}`).expect(404);
+});
+
+test("correos de encargos para los dos lados, neutros y con baja de un clic", async () => {
+  await pool.query("delete from email_outbox");
+  const reg = agent();
+  await reg.post("/api/auth/register").send({ email: "rin@test.dev", password: "rin-12345", name: "Rin", handle: "rin", adult: true }).expect(201);
+  const id = (await reg.post("/api/commissions").field("type", "2").field("description", "Una escena con lluvia y neón").expect(201)).body.id;
+  const toArtist = await lastEmails("zaber@test.dev");
+  assert.match(toArtist[0].subject, /^Nuevo pedido de comisión C-\d+$/);
+  assert.match(toArtist[0].html, new RegExp(`/#encargo-${id}`));
+  await artist.post(`/api/commissions/${id}/quote`).send({ price: "70 USD", days: 10 }).expect(200);
+  const q1 = (await lastEmails("rin@test.dev"))[0];
+  assert.match(q1.subject, /^Presupuesto para tu encargo/);
+  assert.match(q1.text, /70 USD, con entrega en 10 días/);
+  assert.match(q1.headers["List-Unsubscribe"], /\/api\/email\/unsubscribe\?u=\d+&c=comms&t=/);
+  // Nunca se incluye la descripción del encargo ni imágenes.
+  assert.doesNotMatch(q1.html, /lluvia|<img/);
+  await reg.post(`/api/commissions/${id}/quote-response`).send({ accept: true }).expect(200);
+  assert.match((await lastEmails("zaber@test.dev"))[0].subject, /^Presupuesto aceptado/);
+  await artist.post(`/api/commissions/${id}/updates`).field("status", "sketch").field("askApproval", "true").expect(201);
+  assert.match((await lastEmails("rin@test.dev"))[0].subject, /^Zaber necesita tu aprobación/);
+  await reg.post(`/api/commissions/${id}/approval`).send({ approve: false, note: "más luz" }).expect(200);
+  assert.match((await lastEmails("zaber@test.dev"))[0].subject, /^Piden cambios en el boceto/);
+
+  // Darse de baja de los correos de encargos con el enlace del correo.
+  const link = new URL(q1.headers["List-Unsubscribe"].slice(1, -1));
+  const page = await request(app).get(link.pathname + link.search).expect(200);
+  assert.match(page.text, /Dejar de recibir/);
+  await request(app).get(link.pathname + link.search.replace(/t=[^&]+/, "t=falso")).expect(400);
+  await request(app).post(link.pathname + link.search).expect(200);
+  const before = (await lastEmails("rin@test.dev")).length;
+  await artist.post(`/api/commissions/${id}/updates`).field("status", "color").expect(201);
+  assert.equal((await lastEmails("rin@test.dev")).length, before, "tras darse de baja no llegan más correos de encargos");
+  assert.equal((await reg.get("/api/auth/me")).body.user.prefs.mail_comms, false);
+  // El aviso dentro de la web sigue llegando.
+  assert.equal((await reg.get("/api/notifications")).body.notifications[0].type, "comm_update");
+});
+
+test("mensajes: un solo correo por conversación cada 15 minutos", async () => {
+  await pool.query("delete from email_outbox; delete from email_throttle;");
+  const rin = agent();
+  await rin.post("/api/auth/login").send({ email: "rin@test.dev", password: "rin-12345" }).expect(200);
+  await rin.post("/api/messages").field("text", "hola").expect(201);
+  await rin.post("/api/messages").field("text", "¿sigues ahí?").expect(201);
+  const mails = (await lastEmails("zaber@test.dev")).filter(m => /te ha escrito/.test(m.subject));
+  assert.equal(mails.length, 1);
+  assert.doesNotMatch(mails[0].html, /sigues ahí/, "el texto del mensaje no va en el correo");
+});
+
+test("respuestas y obras nuevas solo llegan por correo si se activan", async () => {
+  await pool.query("delete from email_outbox");
+  const rin = agent();
+  await rin.post("/api/auth/login").send({ email: "rin@test.dev", password: "rin-12345" }).expect(200);
+  await rin.post("/api/follow").expect(200);
+  const w = (await artist.post("/api/works").field("title", JSON.stringify({ es: "Nueva", en: "" })).attach("image", await photo(), "a.jpg").expect(201)).body.work;
+  await new Promise(r => setTimeout(r, 200));
+  assert.equal((await lastEmails("rin@test.dev")).length, 0, "por defecto no se mandan obras nuevas");
+  await rin.patch("/api/me").send({ prefs: { mail_news: true, mail_social: true } }).expect(200);
+  const w2 = (await artist.post("/api/works").field("title", JSON.stringify({ es: "Otra", en: "" })).attach("image", await photo(), "b.jpg").expect(201)).body.work;
+  await new Promise(r => setTimeout(r, 200));
+  assert.match((await lastEmails("rin@test.dev"))[0].subject, /obra nueva/);
+  const c = (await rin.post(`/api/works/${w2.id}/comments`).send({ text: "¡qué bonita!" }).expect(201)).body.comment;
+  await artist.post(`/api/works/${w2.id}/comments`).send({ text: "gracias", parentId: c.id }).expect(201);
+  assert.match((await lastEmails("rin@test.dev"))[0].subject, /ha respondido a tu comentario/);
+  await artist.delete(`/api/works/${w.id}`).expect(200);
+  await artist.delete(`/api/works/${w2.id}`).expect(200);
+});
+
+test("recordatorio por correo cuando empieza un evento", async () => {
+  await pool.query("delete from email_outbox");
+  const { remindEvents } = await import("../src/notify.js");
+  const soon = new Date(Date.now() + 1000).toISOString();
+  const ev = (await artist.post("/api/events").send({ title: { es: "Directo", en: "Live" }, startsAt: soon }).expect(201)).body;
+  const rin = agent();
+  await rin.post("/api/auth/login").send({ email: "rin@test.dev", password: "rin-12345" }).expect(200);
+  await rin.patch("/api/me").send({ prefs: { mail_news: false } }).expect(200);
+  await rin.post(`/api/events/${ev.id}/notify`).expect(200);
+  await new Promise(r => setTimeout(r, 1200));
+  await remindEvents();
+  await remindEvents();
+  const mails = await lastEmails("rin@test.dev");
+  assert.equal(mails.length, 1, "se avisa una sola vez, aunque tenga desactivadas las obras nuevas (pulsó Avisarme)");
+  assert.match(mails[0].subject, /Ya está aquí: Directo/);
+});
+
+test("panel: estado del correo y correo de prueba", async () => {
+  const st = (await artist.get("/api/admin/mail").expect(200)).body;
+  assert.equal(st.configured, false);
+  await fan.get("/api/admin/mail").expect(401);
+  const r = await artist.post("/api/admin/mail/test").expect(200);
+  assert.equal(r.body.to, "zaber@test.dev");
+  const files = await fs.readdir(process.env.MAIL_OUTBOX_DIR);
+  assert.ok(files.some(f => f.endsWith(".html")), "sin SMTP, el correo se guarda como archivo para poder verlo");
 });

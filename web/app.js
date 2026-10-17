@@ -713,9 +713,16 @@ function renderProfile() {
         <div class="field"><label for="pNew2">${t("newPass2")}</label><input type="password" id="pNew2" autocomplete="new-password"><span class="err" data-err="next2"></span></div></div>
       <button class="btn primary" style="justify-self:start">${t("changePass")}</button></form>
     ${art ? "" : `<div class="panel" style="border-color:rgba(255,107,139,.3)"><h3>${t("dangerZone")}</h3><p class="muted">${t("dangerText")}</p><button class="btn danger" id="delAcc" style="justify-self:start">${t("delAccount")}</button></div>`}</div>`;
-  if (S.proTab === "prefs") body = `<div class="panel" style="max-width:760px;gap:0">
-    ${[["blur", "prefBlur", "prefBlurD"], ["mail", "prefMail", "prefMailD"], ["mention", "prefMention", ""]].map(([k, a, b]) => `<div class="setrow"><div class="grow"><b>${t(a)}</b>${b ? `<small>${t(b)}</small>` : ""}</div><label class="switch"><input type="checkbox" data-pref="${k}" ${me.prefs[k] !== false ? "checked" : ""} aria-label="${t(a)}"><span></span></label></div>`).join("")}
-    <div class="setrow"><div class="grow"><b>${t("prefLang")}</b></div><div class="seg"><button data-lang2="es" aria-pressed="${S.lang === "es"}">Español</button><button data-lang2="en" aria-pressed="${S.lang === "en"}">English</button></div></div></div>`;
+  if (S.proTab === "prefs") {
+    const row = (k, title, help) => `<div class="setrow"><div class="grow"><b>${title}</b>${help ? `<small>${help}</small>` : ""}</div><label class="switch"><input type="checkbox" data-pref="${k}" ${me.prefs[k] ? "checked" : ""} aria-label="${title}"><span></span></label></div>`;
+    const cats = Object.entries(t("mailCat")).filter(([k]) => !(art && k === "news"));
+    body = `<div style="display:grid;gap:22px;max-width:760px">
+      <div class="panel" style="gap:0"><h3 style="margin-bottom:6px">${t("prefMail")}</h3><p class="muted" style="margin-bottom:6px">${t("prefMailD")}</p>
+        ${cats.map(([k, [title, help]]) => row(`mail_${k}`, title, help)).join("")}</div>
+      <div class="panel" style="gap:0"><h3 style="margin-bottom:6px">${t("prefWeb")}</h3>
+        ${row("blur", t("prefBlur"), t("prefBlurD"))}${row("mention", t("prefMention"), "")}
+        <div class="setrow"><div class="grow"><b>${t("prefLang")}</b></div><div class="seg"><button data-lang2="es" aria-pressed="${S.lang === "es"}">Español</button><button data-lang2="en" aria-pressed="${S.lang === "en"}">English</button></div></div></div></div>`;
+  }
   if (S.proTab === "encargos") body = S.comms.length ? `<div style="display:grid;gap:10px;max-width:860px">${S.comms.map(c => commCard(c)).join("")}</div>` : `<div class="empty"><svg><use href="#brush"/></svg><p>${t("noComms")}</p><a class="btn sm primary" href="#comisiones">${t("ctaCommission")}</a></div>`;
   box.innerHTML = `<div style="display:grid;gap:22px"><div style="display:flex;gap:14px;align-items:center">${avatarHTML(me, 56)}<div><h2 style="font-size:2rem">${esc(me.name)}</h2><p class="muted">@${esc(me.handle)}</p></div></div>
     <div class="tabbar" role="tablist">${tabs.map(([k, v]) => `<button role="tab" data-protab="${k}" aria-selected="${S.proTab === k}">${v}</button>`).join("")}</div>${body}</div>`;
@@ -808,13 +815,19 @@ async function renderPanel() {
           <div class="setrow"><div class="grow"><b>${t("evShow")}</b></div><label class="switch"><input type="checkbox" id="evShowNew" ${!ev || ev.visible ? "checked" : ""} aria-label="${t("evShow")}"><span></span></label></div>
           <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn primary"><svg class="i"><use href="#cal"/></svg>${t("evSave")}</button>${ev ? `<button type="button" class="btn ghost" id="evCancel">${t("cancel")}</button>` : ""}</div></form></div>`;
     }
+    const mail = S.ptab === "sitio" ? await api("/admin/mail") : null;
     if (S.ptab === "sitio") body = `<div class="two even">
       <form class="panel" id="siteForm" novalidate><h3>${t("siteTitle")}</h3>
         <div class="setrow"><div class="grow"><b>${t("openToggle")}</b><small>${t("openToggleD")}</small></div><label class="switch"><input type="checkbox" id="siteOpen" ${S.site.open ? "checked" : ""} aria-label="${t("openToggle")}"><span></span></label></div>
         <div class="field"><label for="abEs">${t("aboutEs")}</label><textarea id="abEs" maxlength="3000">${esc(S.site.about.es)}</textarea></div>
         <div class="field"><label for="abEn">${t("aboutEn")}</label><textarea id="abEn" maxlength="3000">${esc(S.site.about.en)}</textarea></div>
         <button class="btn primary" style="justify-self:start">${t("saveChanges")}</button></form>
-      <div class="panel"><h3>${t("socialTitle")}</h3><p class="muted">${t("socialHelp")}</p><div id="socialRows">${S.site.socials.map(s => { const [name, icon] = SOCIAL_META[s.id]; return `<div class="social-row ${s.on ? "" : "off"}"><span class="ic"><svg class="i"><use href="#${icon}"/></svg></span><b>${name}</b><label hidden for="su-${s.id}">${name} URL</label><input type="url" id="su-${s.id}" data-surl="${s.id}" maxlength="300" value="${esc(s.url)}" placeholder="https://"><label class="switch"><input type="checkbox" data-son="${s.id}" ${s.on ? "checked" : ""} aria-label="${name}"><span></span></label></div>`; }).join("")}</div></div></div>`;
+      <div style="display:grid;gap:22px;align-content:start"><div class="panel"><h3>${t("mailTitle")}</h3>
+        <p><span class="pill ${mail.configured ? "ok" : "wait"}">${mail.configured ? "SMTP" : "—"}</span> ${mail.configured ? t("mailOn")(esc(mail.from)) : t("mailOff")}</p>
+        <p class="muted">${t("mailQueue")(mail.pending, mail.failed)} ${t("mailSent")(mail.sentWeek)}</p>
+        ${mail.lastError ? `<p class="err">${t("mailLastError")} ${esc(mail.lastError)}</p>` : ""}
+        <button class="btn sm" id="mailTest" style="justify-self:start"><svg class="i"><use href="#send"/></svg>${t("mailTest")}</button></div>
+      <div class="panel"><h3>${t("socialTitle")}</h3><p class="muted">${t("socialHelp")}</p><div id="socialRows">${S.site.socials.map(s => { const [name, icon] = SOCIAL_META[s.id]; return `<div class="social-row ${s.on ? "" : "off"}"><span class="ic"><svg class="i"><use href="#${icon}"/></svg></span><b>${name}</b><label hidden for="su-${s.id}">${name} URL</label><input type="url" id="su-${s.id}" data-surl="${s.id}" maxlength="300" value="${esc(s.url)}" placeholder="https://"><label class="switch"><input type="checkbox" data-son="${s.id}" ${s.on ? "checked" : ""} aria-label="${name}"><span></span></label></div>`; }).join("")}</div></div></div></div>`;
   } catch (e) { showError(e); body = ""; }
   if (S.route !== "panel") return;
   shell();
@@ -836,6 +849,10 @@ async function renderPanel() {
   });
   $("#evCancel")?.addEventListener("click", () => { S.evEditing = null; renderPanel(); });
   $$("[data-evshow]").forEach(i => i.addEventListener("change", () => api(`/events/${i.dataset.evshow}`, { method: "PATCH", body: { visible: i.checked } }).then(reloadEvents).then(() => renderPanel()).catch(err => showError(err))));
+  $("#mailTest")?.addEventListener("click", e => busy(e.currentTarget, async () => {
+    try { const r = await api("/admin/mail/test", { method: "POST" }); toast(r.configured ? t("mailTestOk")(r.to) : t("mailTestSaved")); renderPanel(); }
+    catch (err) { showError(err); renderPanel(); }
+  }));
   $("#siteForm")?.addEventListener("submit", e => {
     e.preventDefault();
     busy(e.submitter, async () => {
@@ -896,19 +913,26 @@ function updateBadges() {
 }
 
 // ---------- entrar / registrarse ----------
-let authMode = "login", resetToken = null;
+let authMode = "login";
 function openAuth(mode = "login") {
   authMode = mode;
   const f = $("#authForm"); clearErrors(f);
-  const txt = { login: ["loginTitle", "loginText", "logIn"], register: ["joinTitle", "joinText", "createAccount"], forgot: ["forgotTitle", "forgotText", "forgotSend"], reset: ["resetTitle", "resetText", "resetGo"] }[mode];
-  $("#authTitle").textContent = t(txt[0]); $("#authText").textContent = t(txt[1]); $("#authGo").textContent = t(txt[2]);
+  const txt = { login: ["loginTitle", "loginText", "logIn"], register: ["joinTitle", "joinText", "createAccount"], forgot: ["forgotTitle", "forgotText", "forgotSend"], code: ["codeTitle", null, "resetGo"] }[mode];
+  $("#authTitle").textContent = t(txt[0]); $("#authGo").textContent = t(txt[2]);
+  $("#authText").textContent = mode === "code" ? t("codeText")($("#auEmail").value.trim()) : t(txt[1]);
   f.querySelectorAll("[data-mode]").forEach(el => { el.hidden = !el.dataset.mode.split(" ").includes(mode); });
   $("#auPass").autocomplete = mode === "login" ? "current-password" : "new-password";
-  $("#auPassLbl").textContent = mode === "reset" ? t("newPass") : t("password");
+  $("#auPassLbl").textContent = mode === "code" ? t("newPass") : t("password");
+  if (mode === "code") { $("#auCode").value = ""; $("#auPass").value = ""; }
   if (!$("#login").open) openDlg($("#login"));
-  setTimeout(() => (mode === "register" ? $("#auName") : mode === "reset" ? $("#auPass") : $("#auEmail")).focus(), 60);
+  setTimeout(() => (mode === "register" ? $("#auName") : mode === "code" ? $("#auCode") : $("#auEmail")).focus(), 60);
 }
 $("#authForm").addEventListener("click", e => { const b = e.target.closest("[data-auth]"); if (b) openAuth(b.dataset.auth); });
+$("#auCode").addEventListener("input", e => { e.target.value = e.target.value.replace(/\D/g, "").slice(0, 6); });
+$("#resendCode").addEventListener("click", () => busy($("#resendCode"), async () => {
+  try { await api("/auth/forgot", { method: "POST", body: { email: $("#auEmail").value.trim() } }); toast(t("codeResent")); }
+  catch (err) { $("#authErr").textContent = err.message; }
+}));
 $("#authForm").addEventListener("submit", e => {
   e.preventDefault();
   const f = e.target; clearErrors(f);
@@ -921,13 +945,16 @@ $("#authForm").addEventListener("submit", e => {
         S.me = (await api("/auth/register", { method: "POST", body: { email, password, name: $("#auName").value.trim(), handle: $("#auHandle").value.trim(), lang: S.lang, adult: true } })).user;
         await afterLogin("welcomeNew");
       }
-      if (authMode === "forgot") { await api("/auth/forgot", { method: "POST", body: { email } }); $("#authText").textContent = t("forgotSent"); }
-      if (authMode === "reset") {
-        await api("/auth/reset", { method: "POST", body: { token: resetToken, password } });
+      if (authMode === "forgot") { await api("/auth/forgot", { method: "POST", body: { email } }); openAuth("code"); }
+      if (authMode === "code") {
+        const code = $("#auCode").value.trim();
+        if (!/^\d{6}$/.test(code)) { f.querySelector('[data-err="code"]').textContent = t("errCode"); return; }
+        await api("/auth/reset", { method: "POST", body: { email, code, password } });
         S.me = (await api("/auth/me")).user; await afterLogin("resetOk");
       }
     } catch (err) {
       if (err.fields) showError(err, f); else $("#authErr").textContent = err.message;
+      if (err.code === "bad_code") f.querySelector('[data-err="code"]').textContent = err.message;
     }
   });
 });
@@ -950,7 +977,6 @@ function moveIndicator() { const a = $(`#menu a[aria-current="page"]`), ind = $(
 function route(first) {
   let r = location.hash.slice(1) || "inicio";
   const m = r.match(/^encargo-(\d+)$/); if (m) { S.commId = Number(m[1]); r = "encargo"; }
-  if (r.startsWith("reset-")) { resetToken = r.slice(6); history.replaceState(null, "", location.pathname); openAuth("reset"); r = "inicio"; }
   if (!ROUTES.includes(r) || (r === "panel" && !isArtist()) || (r === "encargo" && !S.commId)) r = "inicio";
   if (["guardadas", "megusta", "perfil", "encargo"].includes(r) && !S.me) { r = "inicio"; setTimeout(() => needLogin("login"), 50); }
   const changed = S.route !== r; S.route = r;

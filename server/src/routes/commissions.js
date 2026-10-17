@@ -91,7 +91,7 @@ commissions.post("/commissions", requireUser, upload.array("files", 6), ah(async
     await addUpdate(client, c, req.user, { status: "requested", body: "" }, req.files);
     return c.id;
   });
-  await notify(await artistId(), "comm_new", { commissionId: id, by: req.user.handle });
+  await notify(await artistId(), "comm_new", { commissionId: id, code: code(id), by: req.user.handle, name: req.user.name });
   res.status(201).json({ id, code: code(id) });
 }));
 
@@ -104,7 +104,7 @@ commissions.post("/commissions/:id/quote", requireUser, ah(async (req, res) => {
     await client.query("update commissions set status = 'quoted', quote_price = $2, quote_days = $3, updated_at = now() where id = $1", [c.id, b.price, b.days]);
     await addUpdate(client, c, req.user, { status: "quoted", body: b.note || "" });
   });
-  await notify(c.client_id, "comm_quote", { commissionId: c.id });
+  await notify(c.client_id, "comm_quote", { commissionId: c.id, code: code(c.id), price: b.price, days: b.days });
   res.json({ ok: true });
 }));
 
@@ -117,7 +117,7 @@ commissions.post("/commissions/:id/reject", requireUser, ah(async (req, res) => 
     await client.query("update commissions set status = 'rejected', approval = null, updated_at = now() where id = $1", [c.id]);
     await addUpdate(client, c, req.user, { status: "rejected", body: b.reason || "" });
   });
-  await notify(c.client_id, "comm_update", { commissionId: c.id, status: "rejected" });
+  await notify(c.client_id, "comm_update", { commissionId: c.id, code: code(c.id), status: "rejected" });
   res.json({ ok: true });
 }));
 
@@ -131,7 +131,7 @@ commissions.post("/commissions/:id/quote-response", requireUser, ah(async (req, 
     await client.query("update commissions set status = $2, updated_at = now() where id = $1", [c.id, status]);
     await addUpdate(client, c, req.user, { status });
   });
-  await notify(await artistId(), "comm_response", { commissionId: c.id, accepted: accept });
+  await notify(await artistId(), "comm_response", { commissionId: c.id, code: code(c.id), accepted: accept, by: req.user.handle, name: req.user.name });
   res.json({ ok: true });
 }));
 
@@ -145,7 +145,7 @@ commissions.post("/commissions/:id/approval", requireUser, ah(async (req, res) =
     await client.query("update commissions set approval = $2, updated_at = now() where id = $1", [c.id, approval]);
     await addUpdate(client, c, req.user, { approval, body: b.note || "" });
   });
-  await notify(await artistId(), "comm_approval", { commissionId: c.id, approved: b.approve });
+  await notify(await artistId(), "comm_approval", { commissionId: c.id, code: code(c.id), approved: b.approve, by: req.user.handle, name: req.user.name });
   res.json({ ok: true });
 }));
 
@@ -170,7 +170,9 @@ commissions.post("/commissions/:id/updates", requireUser, upload.array("files", 
     await addUpdate(client, c, req.user, { body: b.text, status: b.status, askApproval: b.askApproval }, req.files);
   });
   const to = isArtist ? c.client_id : await artistId();
-  await notify(to, "comm_update", { commissionId: c.id, status: b.status || null });
+  // Cambio de estado o petición de aprobación = "novedades"; solo texto o archivos = "mensaje nuevo".
+  if (isArtist && (b.status || b.askApproval)) await notify(to, "comm_update", { commissionId: c.id, code: code(c.id), status: b.status || c.status, ask: !!b.askApproval });
+  else await notify(to, "comm_message", { commissionId: c.id, code: code(c.id), by: req.user.handle, name: req.user.name });
   if (b.text) await notifyMentions(b.text, req.user.id, { commissionId: c.id, by: req.user.handle });
   res.status(201).json({ ok: true });
 }));
@@ -230,7 +232,7 @@ commissions.post("/messages", requireUser, upload.array("files", 6), ah(async (r
   const out = msgOut(m, files);
   push(other.id, { type: "message", message: out, from: publicUser(req.user) });
   push(req.user.id, { type: "message", message: out, from: publicUser(req.user) });
-  await notify(other.id, "message", { by: req.user.handle, userId: req.user.id });
+  await notify(other.id, "message", { by: req.user.handle, name: req.user.name, userId: req.user.id });
   if (b.text) await notifyMentions(b.text, req.user.id, { by: req.user.handle });
   res.status(201).json({ message: out });
 }));

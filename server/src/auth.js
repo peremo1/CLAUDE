@@ -51,12 +51,13 @@ export function requireArtist(req, _res, next) {
 // sin permiso CORS (que no damos), así que bloquea ataques CSRF junto con la cookie SameSite=Lax.
 export function csrfGuard(req, _res, next) {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+  // La baja de correos llega desde fuera (el programa de correo); se protege con su firma, no con la cabecera.
+  if (req.path === "/email/unsubscribe") return next();
   if (req.get("x-requested-with") !== "zaber") return next(forbidden("csrf", "Petición no permitida."));
   next();
 }
 
-export const resetTokenHash = sha256;
-
 export const avatarUrl = u => (u?.avatar ? `/media/avatars/${u.avatar}` : null);
 export const publicUser = u => u && ({ id: u.id, name: u.name, handle: u.handle, bio: u.bio, role: u.role, avatar: avatarUrl(u) });
-export const selfUser = u => u && ({ ...publicUser(u), email: u.email, lang: u.lang, prefs: u.prefs });
+export const selfUser = u => u && ({ ...publicUser(u), email: u.email, lang: u.lang, prefs: { ...MAIL_PREF_DEFAULTS, ...u.prefs } });
+const MAIL_PREF_DEFAULTS = { blur: true, mention: true, mail_comms: true, mail_messages: true, mail_social: false, mail_news: false };

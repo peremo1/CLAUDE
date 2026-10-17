@@ -12,6 +12,7 @@ import { works, getWork } from "./routes/works.js";
 import { site } from "./routes/site.js";
 import { commissions } from "./routes/commissions.js";
 import { files } from "./routes/files.js";
+import { email } from "./routes/email.js";
 import { workImageUrls } from "./media.js";
 
 export function createApp() {
@@ -36,6 +37,7 @@ export function createApp() {
   }));
 
   app.use(express.json({ limit: "200kb" }));
+  app.use(express.urlencoded({ extended: false, limit: "10kb" }));
   app.use(cookieParser());
 
   const api = express.Router();
@@ -44,7 +46,7 @@ export function createApp() {
   api.use(loadUser, csrfGuard);
   api.use((_req, res, next) => { res.set("Cache-Control", "no-store"); next(); });
   api.get("/health", (_req, res) => res.json({ ok: true }));
-  api.use(account, works, site, commissions, files);
+  api.use(account, works, site, commissions, files, email);
   api.use((_req, _res, next) => next(new HttpError(404, "not_found", "Esa ruta de la API no existe.")));
   app.use("/api", api, errorHandler);
 

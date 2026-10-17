@@ -46,3 +46,5 @@ export function push(userId, payload) {
   const msg = JSON.stringify(payload);
   for (const ws of set) if (ws.readyState === 1) ws.send(msg);
 }
+
+export const isOnline = userId => (sockets.get(userId)?.size || 0) > 0;

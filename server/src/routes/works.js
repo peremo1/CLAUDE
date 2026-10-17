@@ -86,8 +86,10 @@ works.post("/works", requireArtist, upload.single("image"), ah(async (req, res) 
     return w.id;
   }).catch(async e => { await removeWorkImage(image); throw e; });
   // Aviso a quienes siguen a Zaber.
-  const followers = await many("select user_id from follows");
-  for (const f of followers) await notify(f.user_id, "new_work", { workId: id });
+  // Se hace en segundo plano para no hacer esperar a la artista si hay muchas personas siguiéndola.
+  many("select user_id from follows").then(async followers => {
+    for (const f of followers) await notify(f.user_id, "new_work", { workId: id });
+  }).catch(e => console.error(e));
   res.status(201).json({ work: workOut(await getWork(id, req.user.id)) });
 }));
 
@@ -160,7 +162,7 @@ works.post("/works/:id/comments", requireUser, ah(async (req, res) => {
   // Las respuestas siempre cuelgan del comentario raíz: un solo nivel de hilo.
   const rootId = parent ? (parent.parent_id || parent.id) : null;
   const c = await one("insert into comments (work_id, user_id, parent_id, body) values ($1, $2, $3, $4) returning id", [workId, req.user.id, rootId, b.text]);
-  if (parent && parent.user_id !== req.user.id) await notify(parent.user_id, "comment_reply", { workId, commentId: c.id, by: req.user.handle });
+  if (parent && parent.user_id !== req.user.id) await notify(parent.user_id, "comment_reply", { workId, commentId: c.id, by: req.user.handle, name: req.user.name });
   await notifyMentions(b.text, req.user.id, { workId, commentId: c.id, by: req.user.handle });
   const row = await one(`select c.*, u.name, u.handle, u.role, u.avatar, u.bio, 0 as likes, false as liked
     from comments c join users u on u.id = c.user_id where c.id = $1`, [c.id]);

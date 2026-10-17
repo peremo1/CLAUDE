@@ -246,12 +246,14 @@
       <div class="field"><label for="auHandle" data-t="username"></label><input type="text" id="auHandle" autocomplete="username" maxlength="31" placeholder="@"><span class="err" data-err="handle"></span></div>
     </div>
     <div class="field" data-mode="login register forgot"><label for="auEmail" data-t="email"></label><input type="email" id="auEmail" autocomplete="email" maxlength="200"><span class="err" data-err="email"></span></div>
-    <div class="field" data-mode="login register reset"><label for="auPass" id="auPassLbl" data-t="password"></label><input type="password" id="auPass" autocomplete="current-password" maxlength="200"><small data-mode="register reset" data-t="passHelp"></small><span class="err" data-err="password"></span></div>
+    <div class="field" data-mode="code"><label for="auCode" data-t="codeLabel"></label><input type="text" id="auCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" style="font-size:1.4rem;letter-spacing:.4em;text-align:center"><span class="err" data-err="code"></span></div>
+    <div class="field" data-mode="login register code"><label for="auPass" id="auPassLbl" data-t="password"></label><input type="password" id="auPass" autocomplete="current-password" maxlength="200"><small data-mode="register code" data-t="passHelp"></small><span class="err" data-err="password"></span></div>
     <label class="check" data-mode="register"><input type="checkbox" id="auAge"><span data-t="ageConfirm"></span></label>
     <button class="btn primary" id="authGo"></button>
     <div class="auth-switch" data-mode="login"><button type="button" class="link-btn" data-auth="forgot" data-t="forgotQ"></button></div>
     <div class="auth-switch" data-mode="login"><span data-t="noAccount"></span><button type="button" class="link-btn" data-auth="register" data-t="createAccount"></button></div>
-    <div class="auth-switch" data-mode="register forgot"><span data-t="haveAccountQ"></span><button type="button" class="link-btn" data-auth="login" data-t="logIn"></button></div>
+    <div class="auth-switch" data-mode="code"><span data-t="noCodeQ"></span><button type="button" class="link-btn" id="resendCode" data-t="resendCode"></button></div>
+    <div class="auth-switch" data-mode="register forgot code"><span data-t="haveAccountQ"></span><button type="button" class="link-btn" data-auth="login" data-t="logIn"></button></div>
   </form>
 </dialog>
 

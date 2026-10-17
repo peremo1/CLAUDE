@@ -105,13 +105,54 @@ docker compose exec -T app sh -c "tar xzf - -C /data/media" < /var/backups/zaber
 Si la copia está en restic: `restic restore latest --target /tmp/restaurar` y usa los archivos que aparezcan ahí.
 
 ## Correo
-Sin servidor de correo configurado, la web funciona igual. Los correos (recuperar contraseña, avisos de encargos y mensajes) no se envían: se escriben en el registro (`docker compose logs app`). Para enviarlos de verdad, rellena las variables `SMTP_*` de `.env` con un proveedor que acepte este tipo de sitio y ejecuta `docker compose up -d`.
+
+La web envía correos desde una dirección del sistema, por ejemplo `no-reply@zaberovich.com`:
+
+| Quién | Cuándo |
+|---|---|
+| Cualquiera | Código de 6 números para cambiar la contraseña (caduca en 15 minutos, 5 intentos) |
+| Zaber | Pedido nuevo, presupuesto aceptado o rechazado, boceto aprobado o con cambios, mensajes en encargos y mensajes privados |
+| Cliente | Presupuesto recibido, boceto para aprobar, cambios de estado, entrega, mensajes de Zaber |
+| Quien lo active | Respuestas y menciones, obras nuevas, y el recordatorio de "Avisarme" cuando empieza un evento |
+
+Cada persona elige en **Mi perfil → Preferencias** qué categorías recibe, y cada correo trae un enlace para darse de baja con un clic. Para no llenar la bandeja, no se manda correo de un mensaje si la persona tiene la web abierta, y como mucho se manda uno cada 15 minutos por conversación. **Los correos nunca incluyen imágenes, títulos de obras ni el texto de los mensajes**: solo el aviso y un botón para entrar en la web.
+
+Los correos se guardan primero en una cola y se envían en segundo plano. Si el proveedor falla, se reintenta durante unas horas.
+
+### Sin proveedor (como ahora)
+Todo funciona igual, pero los correos no salen: se guardan como archivos `.html` en `data/outbox` (dentro del contenedor, `/app/server/data/outbox`) para poder ver cómo quedan. Con `docker compose logs app` ves la lista.
+
+### Conectar un proveedor
+Recomendado: un proveedor europeo o suizo que permita usar tu dominio y enviar por SMTP, por ejemplo **Migadu** o **mailbox.org**. No uses Gmail: pide teléfono, enlaza la cuenta a tu identidad y puede cerrarla.
+
+1. Contrata el plan y añade tu dominio en su panel.
+2. El proveedor te dará unos registros DNS. Créalos en Njalla:
+   - **MX**: para recibir correo, si quieres buzón.
+   - **SPF** (registro TXT que empieza por `v=spf1`): autoriza al proveedor a enviar en nombre de tu dominio.
+   - **DKIM** (uno o varios TXT o CNAME): firma los correos.
+   - **DMARC**: un TXT en `_dmarc` con `v=DMARC1; p=quarantine;`.
+
+   Sin SPF, DKIM y DMARC, los correos caen en spam.
+3. Crea la dirección `no-reply@tudominio` (o la que quieras) con su contraseña.
+4. Rellena en `.env` los datos SMTP que te dé el proveedor:
+   ```
+   SMTP_HOST=smtp.proveedor.com
+   SMTP_PORT=587
+   SMTP_SECURE=0          # 1 si usas el puerto 465
+   SMTP_USER=no-reply@zaberovich.com
+   SMTP_PASS=la-contraseña
+   MAIL_FROM=Zaber <no-reply@zaberovich.com>
+   ```
+5. Aplica los cambios con `docker compose up -d`.
+6. En la web, entra como Zaber y ve a **Mi panel → Perfil y redes → Enviarme un correo de prueba**. Si llega, ya está. Si no, el panel muestra el error del proveedor.
 
 ## Privacidad y seguridad
 - Contraseñas guardadas con argon2. Sesiones en cookie `HttpOnly`, `Secure` y `SameSite`, con protección contra peticiones falsificadas desde otras webs (CSRF).
 - Límite de intentos en el inicio de sesión (en Nginx y en la aplicación) y en las subidas.
 - Nginx no guarda registro de las IPs de quien visita.
 - Las imágenes pierden sus metadatos al subirse. Los adjuntos privados no tienen enlace público.
+- Los códigos de contraseña se guardan cifrados, caducan a los 15 minutos y se bloquean tras 5 intentos. Solo se puede pedir uno por minuto.
+- Los correos enviados se borran de la base de datos a los 30 días.
 - La base de datos no está expuesta a internet: solo la aplicación llega a ella.
 - El registro exige confirmar la mayoría de edad. La web muestra además un aviso de edad al entrar.
 

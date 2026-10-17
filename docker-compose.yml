@@ -34,6 +34,7 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-}
+      APP_SECRET: ${APP_SECRET:-}
     volumes:
       - media:/data/media
 

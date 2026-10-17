@@ -1,17 +1,18 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
-import { checkPassword, endSession, hashPassword, publicUser, randomToken, requireUser, resetTokenHash, selfUser, startSession } from "../auth.js";
+import crypto from "node:crypto";
+import { checkPassword, endSession, hashPassword, publicUser, requireUser, selfUser, startSession } from "../auth.js";
 import { config } from "../config.js";
 import { many, one, q } from "../db.js";
 import { ah, bad, HttpError, parse } from "../http.js";
 import { removeAvatar, saveAvatar, upload } from "../media.js";
-import { sendMail } from "../mailer.js";
+import { sendDirect } from "../notify.js";
 
 export const account = Router();
 
-// Frena intentos de adivinar contraseñas: 20 intentos cada 15 minutos por IP.
-const authLimit = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: "draft-7", legacyHeaders: false,
+// Frena intentos de adivinar contraseñas: 20 intentos cada 15 minutos por IP (AUTH_RATE_LIMIT).
+const authLimit = rateLimit({ windowMs: 15 * 60 * 1000, limit: config.authRateLimit, standardHeaders: "draft-7", legacyHeaders: false,
   message: { error: "rate_limited", message: "Demasiados intentos. Espera unos minutos." } });
 
 const zEmail = z.string().trim().toLowerCase().email().max(200);
@@ -49,31 +50,41 @@ account.post("/auth/logout", ah(async (req, res) => {
 
 account.get("/auth/me", (req, res) => res.json({ user: selfUser(req.user) }));
 
-// Siempre responde lo mismo para no revelar qué correos tienen cuenta.
+// Contraseña olvidada: se envía un código de 6 dígitos al correo. Caduca en 15 minutos,
+// admite 5 intentos y solo vale el último pedido. Siempre responde lo mismo para no revelar qué correos tienen cuenta.
+const codeHash = (userId, code) => crypto.createHash("sha256").update(`${config.appSecret}:${userId}:${code}`).digest("hex");
+const CODE_TTL_MIN = 15, CODE_ATTEMPTS = 5;
+
 account.post("/auth/forgot", authLimit, ah(async (req, res) => {
   const { email } = parse(z.object({ email: zEmail }), req.body);
   const user = await one("select id, email, lang from users where lower(email) = $1", [email]);
-  if (user) {
-    const token = randomToken();
-    await q("insert into password_resets (token_hash, user_id, expires_at) values ($1, $2, now() + interval '1 hour')", [resetTokenHash(token), user.id]);
-    const es = user.lang !== "en";
-    await sendMail({
-      to: user.email,
-      subject: es ? "Cambia tu contraseña de Zaber" : "Reset your Zaber password",
-      text: (es ? "Para elegir una contraseña nueva abre este enlace (caduca en 1 hora):" : "Open this link to choose a new password (expires in 1 hour):") + `\n\n${config.publicUrl}/#reset-${token}\n`,
-    });
+  // Como mucho un código por minuto y cuenta, para que nadie pueda llenar de correos a otra persona.
+  const recent = user && await one("select 1 from password_codes where user_id = $1 and created_at > now() - interval '1 minute'", [user.id]);
+  if (user && !recent) {
+    const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
+    await q(`insert into password_codes (user_id, code_hash, expires_at) values ($1, $2, now() + make_interval(mins => $3))
+      on conflict (user_id) do update set code_hash = excluded.code_hash, attempts = 0, expires_at = excluded.expires_at, created_at = now()`,
+      [user.id, codeHash(user.id, code), CODE_TTL_MIN]);
+    await sendDirect(user.email, "reset_code", { code }, user.lang);
   }
   res.json({ ok: true });
 }));
 
 account.post("/auth/reset", authLimit, ah(async (req, res) => {
-  const b = parse(z.object({ token: z.string().min(10).max(200), password: zPassword }), req.body);
-  const row = await one("select * from password_resets where token_hash = $1 and used_at is null and expires_at > now()", [resetTokenHash(b.token)]);
-  if (!row) throw bad("bad_token", "El enlace no es válido o ha caducado. Pide otro.");
-  await q("update password_resets set used_at = now() where token_hash = $1", [row.token_hash]);
-  await q("update users set password_hash = $1 where id = $2", [await hashPassword(b.password), row.user_id]);
-  await q("delete from sessions where user_id = $1", [row.user_id]);
-  await startSession(res, row.user_id);
+  const b = parse(z.object({ email: zEmail, code: z.string().trim().regex(/^\d{6}$/, "El código tiene 6 números."), password: zPassword }), req.body);
+  const user = await one("select id from users where lower(email) = $1", [b.email]);
+  const row = user && await one("select * from password_codes where user_id = $1", [user.id]);
+  const badCode = () => bad("bad_code", "El código no es correcto o ha caducado. Pide otro.", { code: "El código no es correcto o ha caducado." });
+  if (!row || row.attempts >= CODE_ATTEMPTS || new Date(row.expires_at) < new Date()) throw badCode();
+  const okCode = crypto.timingSafeEqual(Buffer.from(row.code_hash, "hex"), Buffer.from(codeHash(user.id, b.code), "hex"));
+  if (!okCode) {
+    await q("update password_codes set attempts = attempts + 1 where user_id = $1", [user.id]);
+    throw badCode();
+  }
+  await q("delete from password_codes where user_id = $1", [user.id]);
+  await q("update users set password_hash = $1 where id = $2", [await hashPassword(b.password), user.id]);
+  await q("delete from sessions where user_id = $1", [user.id]);
+  await startSession(res, user.id);
   res.json({ ok: true });
 }));
 
@@ -85,7 +96,7 @@ account.patch("/me", requireUser, ah(async (req, res) => {
     handle: zHandle.optional(),
     bio: z.string().trim().max(500).optional(),
     lang: z.enum(["es", "en"]).optional(),
-    prefs: z.object({ blur: z.boolean(), mail: z.boolean(), mention: z.boolean() }).partial().optional(),
+    prefs: z.object({ blur: z.boolean(), mention: z.boolean(), mail_comms: z.boolean(), mail_messages: z.boolean(), mail_social: z.boolean(), mail_news: z.boolean() }).partial().optional(),
   }), req.body);
   if (b.handle && await taken("handle", b.handle, req.user.id)) throw bad("handle_taken", "Ese usuario ya está en uso.");
   const prefs = b.prefs ? { ...req.user.prefs, ...b.prefs } : req.user.prefs;
