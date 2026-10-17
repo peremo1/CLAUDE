@@ -1,0 +1,113 @@
+# Plantilla: la imagen de Nginx sustituye ${DOMAIN} al arrancar.
+
+# Límites de peticiones por IP. Sin Cloudflare delante, esto frena abusos y fuerza bruta.
+limit_req_zone $binary_remote_addr zone=auth:10m rate=10r/m;
+limit_req_zone $binary_remote_addr zone=api:10m rate=20r/s;
+limit_req_zone $binary_remote_addr zone=upload:10m rate=30r/m;
+limit_conn_zone $binary_remote_addr zone=conn:10m;
+limit_req_status 429;
+limit_conn_status 429;
+
+map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+
+upstream zaber_app { server app:3000; keepalive 16; }
+
+server {
+  listen 80;
+  server_name ${DOMAIN} www.${DOMAIN};
+  server_tokens off;
+
+  # Let's Encrypt comprueba el dominio aquí.
+  location /.well-known/acme-challenge/ { root /var/www/certbot; }
+  location / { return 301 https://${DOMAIN}$request_uri; }
+}
+
+server {
+  listen 443 ssl;
+  http2 on;
+  server_name www.${DOMAIN};
+  server_tokens off;
+  ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+  return 301 https://${DOMAIN}$request_uri;
+}
+
+server {
+  listen 443 ssl;
+  http2 on;
+  server_name ${DOMAIN};
+  server_tokens off;
+
+  ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+  ssl_protocols TLSv1.2 TLSv1.3;
+  ssl_prefer_server_ciphers off;
+  ssl_session_cache shared:SSL:10m;
+  ssl_session_timeout 1d;
+
+  client_max_body_size 60m;
+  client_body_timeout 30s;
+  limit_conn conn 40;
+
+  gzip on;
+  gzip_types text/css application/javascript application/json image/svg+xml;
+  gzip_min_length 1024;
+
+  # No se guardan las IPs de visitantes en los registros de acceso.
+  access_log off;
+
+  # Web (HTML, CSS, JS, fuentes).
+  root /srv/web;
+  location / {
+    include /etc/nginx/snippets/security.conf;
+    try_files $uri /index.html;
+    location ~* \.(css|js|woff2|jpg|png|svg)$ { include /etc/nginx/snippets/security.conf; expires 7d; }
+  }
+  location = /index.html { include /etc/nginx/snippets/security.conf; add_header Cache-Control "no-cache" always; }
+
+  # Imágenes públicas de obras y avatares, ya convertidas a WebP.
+  location /media/ {
+    alias /srv/media/public/;
+    include /etc/nginx/snippets/security.conf;
+    add_header Cache-Control "public, max-age=2592000, immutable" always;
+  }
+
+  # Adjuntos privados: solo se entregan cuando la aplicación lo autoriza (X-Accel-Redirect).
+  location /_private/ {
+    internal;
+    alias /srv/media/private/;
+    add_header Cache-Control "private, max-age=86400" always;
+    add_header X-Content-Type-Options nosniff always;
+  }
+
+  location /ws {
+    proxy_pass http://zaber_app;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 1h;
+  }
+
+  location /api/auth/ {
+    limit_req zone=auth burst=10 nodelay;
+    include /etc/nginx/snippets/proxy.conf;
+  }
+
+  location ~ ^/api/(works|me/avatar|commissions|messages)$ {
+    limit_req zone=upload burst=20 nodelay;
+    include /etc/nginx/snippets/proxy.conf;
+  }
+
+  location /api/ {
+    limit_req zone=api burst=60 nodelay;
+    include /etc/nginx/snippets/proxy.conf;
+  }
+
+  # Enlaces compartidos de obras: la aplicación añade la vista previa para redes.
+  location /obra/ {
+    include /etc/nginx/snippets/proxy.conf;
+  }
+}

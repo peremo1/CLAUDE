@@ -1,0 +1,72 @@
+# Todo el sitio en un VPS: base de datos, aplicación, Nginx con HTTPS y renovación de certificados.
+# Arranque: ver README.md, sección "Desplegar en el VPS".
+name: zaber
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: zaber
+      POSTGRES_DB: zaber
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zaber -d zaber"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Sin puertos publicados: solo la aplicación llega a la base de datos.
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://zaber:${POSTGRES_PASSWORD}@db:5432/zaber
+      PUBLIC_URL: https://${DOMAIN:?Falta DOMAIN en .env}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-0}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+    volumes:
+      - media:/data/media
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on: [app]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./deploy/nginx/zaber.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./deploy/nginx/security.conf:/etc/nginx/snippets/security.conf:ro
+      - ./deploy/nginx/proxy.conf:/etc/nginx/snippets/proxy.conf:ro
+      - ./web:/srv/web:ro
+      - media:/srv/media:ro
+      - certs:/etc/letsencrypt:ro
+      - acme:/var/www/certbot:ro
+    # Recarga la configuración cada 6 horas para usar los certificados renovados.
+    command: /bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & /docker-entrypoint.sh nginx -g "daemon off;"'
+
+  certbot:
+    image: certbot/certbot:v3.1.0
+    restart: unless-stopped
+    volumes:
+      - certs:/etc/letsencrypt
+      - acme:/var/www/certbot
+    entrypoint: /bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done'
+
+volumes:
+  pgdata:
+  media:
+  certs:
+  acme:
