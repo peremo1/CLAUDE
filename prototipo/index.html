@@ -1,0 +1,713 @@
+<title>Zaber</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Figtree:wght@400;500;600&display=swap">
+<style>
+/* Layout: una franja con la mirada del personaje abre la página; debajo, galería en columnas tipo muro. Todo lo demás, silencioso. */
+:root {
+  color-scheme: dark;
+  --ink: #140b1a;        /* fondo: sombra violeta casi negra */
+  --panel: #1e1227;      /* superficies */
+  --line: #36233f;       /* bordes */
+  --violet: #a42fcb;     /* fondo y máscara del personaje */
+  --violet-deep: #6c108d;
+  --hair: #eee3ec;       /* texto: el pelo lavanda */
+  --muted: #a893ae;
+  --eye: #ffd10b;        /* ojos: solo para lo importante */
+  --on-eye: #1c1206;
+  --display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+  --body: "Figtree", "Segoe UI", system-ui, sans-serif;
+  --r-s: 3px;
+  --r-m: 10px;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--ink); color: var(--hair);
+  font: 400 16px/1.55 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--ink); }
+a { color: inherit; }
+button, input, textarea, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--eye); outline-offset: 2px; }
+.wrap { max-width: 1180px; margin: 0 auto; }
+h1, h2, h3 { font-family: var(--display); font-weight: 800; line-height: 1; text-wrap: balance; margin: 0; letter-spacing: .01em; }
+h2 { font-size: clamp(2.2rem, 5vw, 3.4rem); }
+h3 { font-size: 1.6rem; font-weight: 600; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+
+/* botones */
+.btn { white-space: nowrap; display: inline-flex; align-items: center; gap: .5em; border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: .55em 1.1em; cursor: pointer; text-decoration: none; font-weight: 500; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--eye); color: var(--on-eye); border-color: var(--eye); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.violet { background: var(--violet); border-color: var(--violet); color: #fff; }
+.icon-btn { display: inline-flex; align-items: center; gap: .45em; background: none; border: 0; padding: .4em .2em; cursor: pointer; color: var(--hair); }
+.icon-btn svg { width: 22px; height: 22px; }
+.icon-btn[aria-pressed="true"] { color: var(--eye); }
+.icon-btn[aria-pressed="true"] svg { fill: currentColor; }
+
+/* cabecera */
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: color-mix(in srgb, var(--ink) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); margin: 0 calc(-1 * max(16px, env(safe-area-inset-left, 0px))); padding: 0 max(16px, env(safe-area-inset-left, 0px)); }
+.top .wrap { display: flex; align-items: center; gap: 24px; height: 60px; }
+.mark { font-family: var(--display); font-weight: 800; font-size: 1.7rem; text-decoration: none; display: flex; align-items: center; gap: 6px; }
+.mark svg { width: 14px; height: 14px; color: var(--eye); }
+nav.main { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; min-width: 0; }
+nav.main a { text-decoration: none; padding: .4em .8em; border-radius: 999px; color: var(--muted); white-space: nowrap; }
+nav.main a[aria-current="page"] { color: var(--hair); background: var(--panel); }
+.top .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.lang { display: flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.lang button { background: none; border: 0; padding: .3em .7em; cursor: pointer; color: var(--muted); font-size: .85rem; font-weight: 600; }
+.lang button[aria-pressed="true"] { background: var(--hair); color: var(--ink); }
+.me { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; border: 1px solid var(--line); }
+.unread { display: inline-block; min-width: 1.3em; padding: 0 .35em; margin-left: .3em; border-radius: 999px; background: var(--eye); color: var(--on-eye); font-size: .72rem; font-weight: 700; text-align: center; line-height: 1.3em; }
+
+/* hero: la mirada */
+.hero { padding-block: 28px 8px; display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 32px; align-items: end; }
+.gaze { position: relative; aspect-ratio: 8 / 3; max-width: 100%; border-radius: var(--r-s); background-image: url("avatar.jpg"); background-size: 130% auto; background-position: 40% 46%; overflow: hidden; }
+.gaze::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(20,11,26,.85)); }
+.gaze h1 { position: absolute; z-index: 1; left: clamp(14px, 3vw, 36px); bottom: clamp(6px, 1.5vw, 18px); font-size: clamp(4.5rem, 12vw, 10rem); line-height: .8; color: var(--hair); }
+.intro { display: grid; gap: 20px; justify-items: start; }
+.intro p { max-width: 46ch; font-size: 1.08rem; }
+.intro .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.status { display: inline-flex; align-items: center; gap: .45em; font-size: .9rem; color: var(--muted); }
+.status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--eye); }
+
+/* galería */
+section.view { padding-block: 32px 96px; }
+.gal-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 14px; margin-bottom: 20px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); background: none; border-radius: 999px; padding: .3em .9em; cursor: pointer; color: var(--muted); font-size: .92rem; }
+.chip[aria-pressed="true"] { color: var(--hair); border-color: var(--hair); }
+.wall { columns: 3 260px; column-gap: 14px; }
+.tile { display: block; width: 100%; break-inside: avoid; margin: 0 0 14px; padding: 0; border: 0; background: none; cursor: pointer; text-align: left; position: relative; }
+.tile .art { border-radius: var(--r-s); overflow: hidden; position: relative; }
+.tile .frame, .tile .frame > * { display: block; width: 100%; }
+.tile .cap { display: flex; justify-content: space-between; gap: 8px; padding: 8px 2px 0; font-size: .92rem; }
+.tile .cap span:last-child { color: var(--muted); display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.tile .cap svg { width: 15px; height: 15px; }
+.blurred { filter: blur(26px) saturate(.8); transform: scale(1.1); }
+.veil { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--hair); font-size: .9rem; z-index: 1; }
+.veil span { background: color-mix(in srgb, var(--ink) 78%, transparent); padding: 10px 18px 12px; border-radius: var(--r-m); }
+.veil b { font-family: var(--display); font-size: 2rem; display: block; }
+.tag18 { position: absolute; top: 8px; left: 8px; z-index: 1; background: var(--ink); color: var(--hair); font-size: .75rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+.sample { position: absolute; right: 8px; bottom: 8px; z-index: 1; font-size: .72rem; color: rgba(255,255,255,.75); }
+
+/* diálogos */
+dialog { border: 1px solid var(--line); background: var(--ink); color: var(--hair); border-radius: var(--r-m); padding: 0; max-width: min(1100px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); width: 100%; }
+dialog::backdrop { background: rgba(10,5,14,.82); }
+dialog.small { max-width: 440px; }
+.dlg-pad { padding: 28px; display: grid; gap: 16px; }
+.close { position: absolute; top: 10px; right: 10px; z-index: 2; width: 38px; height: 38px; border-radius: 50%; border: 0; background: var(--panel); cursor: pointer; display: grid; place-items: center; }
+.close svg { width: 18px; height: 18px; }
+.detail { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); position: relative; }
+.detail .pic { background: #0c0610; display: grid; place-items: center; min-height: 320px; }
+.detail .pic > * { max-height: calc(100dvh - 34px); width: 100%; object-fit: contain; }
+.detail .side { padding: 28px 24px; display: flex; flex-direction: column; gap: 18px; min-width: 0; max-height: calc(100dvh - 34px); overflow-y: auto; }
+.detail .bar { display: flex; flex-wrap: wrap; gap: 6px 16px; border-block: 1px solid var(--line); padding-block: 8px; font-variant-numeric: tabular-nums; }
+.share { display: flex; flex-wrap: wrap; gap: 8px; }
+.share[hidden] { display: none; }
+.comments { display: grid; gap: 14px; }
+.comment { display: grid; grid-template-columns: 32px 1fr; gap: 10px; }
+.comment .av { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: .85rem; background: var(--panel); color: var(--muted); }
+.comment .av.artist { background: var(--violet); color: #fff; }
+.comment p { font-size: .95rem; }
+.comment .who { font-size: .85rem; color: var(--muted); }
+.comment .who b { color: var(--hair); font-weight: 600; }
+.badge { font-size: .72rem; padding: 0 6px; border-radius: 999px; background: var(--violet); color: #fff; margin-left: 4px; }
+
+/* formularios */
+.field { display: grid; gap: 6px; }
+.field label, .field legend { font-weight: 500; font-size: .95rem; }
+.field small { color: var(--muted); font-size: .85rem; }
+input[type=text], input[type=email], input[type=password], textarea, select { width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-s); padding: .65em .8em; }
+textarea { min-height: 120px; resize: vertical; }
+input:focus, textarea:focus, select:focus { border-color: var(--violet); outline: none; }
+.drop { border: 1px dashed var(--line); border-radius: var(--r-s); padding: 22px; text-align: center; color: var(--muted); }
+.check { display: flex; gap: 10px; align-items: flex-start; }
+.check input { margin-top: .35em; accent-color: var(--eye); }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--hair); color: var(--ink); padding: .6em 1.2em; border-radius: 999px; font-weight: 600; z-index: 30; }
+
+/* comisiones */
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 48px; align-items: start; }
+.steps { list-style: none; margin: 24px 0 0; padding: 0; display: grid; gap: 18px; counter-reset: s; }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 40px 1fr; gap: 12px; }
+.steps li::before { content: counter(s); font-family: var(--display); font-weight: 800; font-size: 2rem; line-height: 1; color: var(--violet); }
+.steps b { display: block; font-weight: 600; }
+.steps span { color: var(--muted); font-size: .95rem; }
+form.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); padding: 26px; display: grid; gap: 18px; }
+form.card input[type=text], form.card textarea, form.card select { background: var(--ink); }
+.gate-note { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); padding: 26px; display: grid; gap: 14px; justify-items: start; }
+
+/* tablas de pedidos */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r-m); }
+table { width: 100%; border-collapse: collapse; min-width: 620px; }
+th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: .95rem; }
+th { color: var(--muted); font-weight: 500; }
+tr:last-child td { border-bottom: 0; }
+.pill { display: inline-block; padding: 1px 10px; border-radius: 999px; font-size: .82rem; font-weight: 600; border: 1px solid var(--line); }
+.pill.new { background: var(--eye); color: var(--on-eye); border-color: var(--eye); }
+.pill.quoted { border-color: var(--violet); color: var(--hair); }
+.pill.doing { background: var(--violet); color: #fff; border-color: var(--violet); }
+.pill.done { color: var(--muted); }
+
+/* mensajes */
+.inbox { display: grid; grid-template-columns: 280px minmax(0, 1fr); border: 1px solid var(--line); border-radius: var(--r-m); overflow: hidden; min-height: 460px; }
+.threads { border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+.threads button { display: grid; grid-template-columns: 36px 1fr; gap: 10px; text-align: left; padding: 14px; border: 0; border-bottom: 1px solid var(--line); background: none; cursor: pointer; }
+.threads button[aria-current="true"] { background: var(--panel); }
+.threads .av { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--panel); color: var(--muted); font-weight: 600; }
+.threads small { color: var(--muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.thread { display: flex; flex-direction: column; min-width: 0; }
+.msgs { flex: 1; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+.msg { max-width: 75%; padding: .6em .9em; border-radius: 14px; background: var(--panel); font-size: .95rem; }
+.msg.mine { align-self: flex-end; background: var(--violet-deep); }
+.msg time { display: block; font-size: .75rem; color: var(--muted); margin-top: 2px; }
+.compose { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); }
+.compose input { flex: 1; min-width: 0; }
+
+/* panel del artista */
+.stats { display: flex; flex-wrap: wrap; gap: 40px; margin: 22px 0 36px; }
+.stats div { display: grid; }
+.stats b { font-family: var(--display); font-size: 2.6rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.stats span { color: var(--muted); font-size: .9rem; }
+
+/* aviso de edad */
+.age { position: fixed; inset: 0; z-index: 40; background: var(--ink); display: grid; place-items: center; padding: 24px max(16px, env(safe-area-inset-left, 0px)); }
+.age .box { max-width: 460px; display: grid; gap: 18px; text-align: left; }
+.age .box img { width: 84px; height: 84px; border-radius: 50%; }
+.age h2 { font-size: clamp(2.4rem, 8vw, 3.4rem); }
+.age .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* barra de boceto */
+.demo { position: fixed; z-index: 20; left: max(12px, env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); background: var(--hair); color: var(--ink); border-radius: 999px; padding: 4px 4px 4px 14px; display: flex; align-items: center; gap: 6px; font-size: .82rem; max-width: calc(100vw - 24px); }
+.demo button { border: 0; background: none; color: var(--ink); padding: .35em .8em; border-radius: 999px; cursor: pointer; font-weight: 600; font-size: .82rem; }
+.demo button[aria-pressed="true"] { background: var(--ink); color: var(--hair); }
+
+footer.foot { border-top: 1px solid var(--line); padding-block: 24px 80px; color: var(--muted); font-size: .9rem; }
+footer.foot .wrap { display: flex; flex-wrap: wrap; gap: 10px 24px; justify-content: space-between; }
+footer.foot nav { display: flex; flex-wrap: wrap; gap: 16px; }
+
+@media (max-width: 820px) {
+  .detail { grid-template-columns: 1fr; }
+  .detail .side { max-height: none; }
+  .detail .pic > * { max-height: 70dvh; }
+  dialog { max-height: calc(100dvh - 16px); overflow-y: auto; }
+  .two, .hero { grid-template-columns: 1fr; gap: 32px; }
+  .hero { gap: 20px; }
+  .inbox { grid-template-columns: 1fr; }
+  .threads { border-right: 0; border-bottom: 1px solid var(--line); }
+  .row2 { grid-template-columns: 1fr; }
+  .gaze { aspect-ratio: 2 / 1; background-size: 200% auto; background-position: 35% 44%; }
+}
+@media (max-width: 560px) {
+  .top .wrap { gap: 0 12px; flex-wrap: wrap; height: auto; padding-top: 10px; }
+  nav.main { order: 3; width: 100%; margin: 6px -4px 0; padding-bottom: 8px; }
+  .top .right .btn { padding: .45em .8em; }
+  .wall { columns: 2; column-gap: 10px; }
+  .tile { margin-bottom: 10px; }
+  .tile .cap { font-size: .82rem; }
+  .demo > span { display: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .gaze { animation: open 1.1s cubic-bezier(.2,.7,.2,1) both; }
+  @keyframes open { from { clip-path: inset(48% 0 48% 0); } to { clip-path: inset(0 0 0 0); } }
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-spark" viewBox="0 0 24 24"><path fill="currentColor" d="M12 0c.7 6.6 4.7 10.9 12 12-7.3 1.1-11.3 5.4-12 12-.7-6.6-4.7-10.9-12-12C7.3 10.9 11.3 6.6 12 0Z"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M12 20s-7.5-4.6-9.3-9.2C1.4 7.4 3.6 4 7 4c2.1 0 3.6 1.2 5 3 1.4-1.8 2.9-3 5-3 3.4 0 5.6 3.4 4.3 6.8C19.5 15.4 12 20 12 20Z"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M6 3h12v18l-6-4.5L6 21V3Z"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 15V3m0 0L7.5 7.5M12 3l4.5 4.5M5 12v8h14v-8"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></symbol>
+</svg>
+
+<div class="age" id="age" hidden>
+  <div class="box">
+    <img src="avatar.jpg" alt="">
+    <h2 data-t="ageTitle"></h2>
+    <p class="muted" data-t="ageText"></p>
+    <div class="actions">
+      <button class="btn primary" id="ageYes" data-t="ageYes"></button>
+      <button class="btn" id="ageNo" data-t="ageNo"></button>
+    </div>
+    <p class="muted" id="ageBye" hidden data-t="ageBye"></p>
+  </div>
+</div>
+
+<header class="top">
+  <div class="wrap">
+    <a class="mark" href="#galeria">Zaber<svg><use href="#i-spark"/></svg></a>
+    <nav class="main" aria-label="Principal">
+      <a href="#galeria" data-route="galeria" data-t="navGallery"></a>
+      <a href="#comisiones" data-route="comisiones" data-t="navCommissions"></a>
+      <a href="#mensajes" data-route="mensajes"><span data-t="navMessages"></span><span class="unread" id="unread" hidden>2</span></a>
+      <a href="#panel" data-route="panel" data-t="navPanel" id="navPanel" hidden></a>
+    </nav>
+    <div class="right">
+      <div class="lang" role="group" aria-label="Idioma / Language">
+        <button data-lang="es">ES</button><button data-lang="en">EN</button>
+      </div>
+      <button class="btn" id="loginBtn" data-t="logIn"></button>
+      <img class="me" id="meAv" alt="" hidden>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- GALERÍA -->
+  <section class="view" data-view="galeria">
+    <div class="wrap">
+      <div class="hero" style="padding-top:0">
+        <div class="gaze" role="img" aria-label="Zaber"><h1>Zaber</h1></div>
+        <div class="intro">
+          <p data-t="bio"></p>
+          <div class="actions">
+            <a class="btn primary" href="#comisiones" data-t="ctaCommission"></a>
+            <a class="btn" href="https://x.com/" target="_blank" rel="noopener">X</a>
+            <a class="btn" href="https://bsky.app/" target="_blank" rel="noopener">Bluesky</a>
+          </div>
+        </div>
+      </div>
+      <div class="gal-head" style="margin-top:40px">
+        <h2 data-t="works"></h2>
+        <div class="chips" role="group" id="filters">
+          <button class="chip" data-f="all" aria-pressed="true" data-t="fAll"></button>
+          <button class="chip" data-f="sfw" aria-pressed="false" data-t="fSfw"></button>
+          <button class="chip" data-f="nsfw" aria-pressed="false">+18</button>
+          <button class="chip" data-f="saved" aria-pressed="false" data-t="fSaved"></button>
+        </div>
+      </div>
+      <div class="wall" id="wall"></div>
+      <p class="muted" id="wallEmpty" hidden></p>
+    </div>
+  </section>
+
+  <!-- COMISIONES -->
+  <section class="view" data-view="comisiones" hidden>
+    <div class="wrap two">
+      <div>
+        <p class="status" data-t="open"></p>
+        <h2 style="margin-top:12px" data-t="comTitle"></h2>
+        <p class="muted" style="margin-top:14px;max-width:44ch" data-t="comIntro"></p>
+        <ol class="steps">
+          <li><div><b data-t="s1"></b><span data-t="s1d"></span></div></li>
+          <li><div><b data-t="s2"></b><span data-t="s2d"></span></div></li>
+          <li><div><b data-t="s3"></b><span data-t="s3d"></span></div></li>
+          <li><div><b data-t="s4"></b><span data-t="s4d"></span></div></li>
+        </ol>
+      </div>
+      <div id="comSide"></div>
+    </div>
+  </section>
+
+  <!-- MENSAJES -->
+  <section class="view" data-view="mensajes" hidden>
+    <div class="wrap">
+      <h2 data-t="navMessages" style="margin-bottom:22px"></h2>
+      <div id="msgSide"></div>
+    </div>
+  </section>
+
+  <!-- PANEL ARTISTA -->
+  <section class="view" data-view="panel" hidden>
+    <div class="wrap">
+      <h2 data-t="panelTitle"></h2>
+      <div class="stats" id="stats"></div>
+      <div class="two">
+        <form class="card" id="uploadForm">
+          <h3 data-t="upTitle"></h3>
+          <div class="drop" data-t="upDrop"></div>
+          <div class="row2">
+            <div class="field"><label for="upEs" data-t="upNameEs"></label><input type="text" id="upEs"></div>
+            <div class="field"><label for="upEn" data-t="upNameEn"></label><input type="text" id="upEn"></div>
+          </div>
+          <div class="field"><label for="upDesc" data-t="upDesc"></label><textarea id="upDesc"></textarea></div>
+          <label class="check"><input type="checkbox" id="upNsfw"><span><span data-t="upNsfw"></span><br><small class="muted" data-t="upNsfwHelp"></small></span></label>
+          <label class="check"><input type="checkbox" id="upCom" checked><span data-t="upComments"></span></label>
+          <button class="btn primary" style="justify-self:start" data-t="publish"></button>
+        </form>
+        <div>
+          <h3 style="margin-bottom:14px" data-t="reqTitle"></h3>
+          <div class="table-wrap"><table id="reqTable"></table></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <span>© 2026 Zaber</span>
+    <nav><a href="#comisiones" data-t="navCommissions"></a><span data-t="terms"></span><span data-t="privacy"></span></nav>
+  </div>
+</footer>
+
+<!-- Ficha de obra -->
+<dialog id="detail" aria-label="Obra">
+  <div class="detail">
+    <button class="close" data-close aria-label="Cerrar"><svg><use href="#i-x"/></svg></button>
+    <div class="pic" id="dPic"></div>
+    <div class="side">
+      <div>
+        <h3 id="dTitle" style="font-size:2.2rem;font-weight:800"></h3>
+        <p class="muted" id="dDate" style="margin-top:6px;font-size:.9rem"></p>
+      </div>
+      <p id="dDesc"></p>
+      <div class="bar">
+        <button class="icon-btn" id="dLike" aria-pressed="false"><svg><use href="#i-heart"/></svg><span id="dLikes"></span></button>
+        <button class="icon-btn" id="dSave" aria-pressed="false"><svg><use href="#i-save"/></svg><span data-t="save"></span></button>
+        <button class="icon-btn" id="dShare" aria-expanded="false"><svg><use href="#i-share"/></svg><span data-t="share"></span></button>
+      </div>
+      <div class="share" id="shareBox" hidden>
+        <a class="btn" id="shX" target="_blank" rel="noopener">X</a>
+        <a class="btn" id="shBs" target="_blank" rel="noopener">Bluesky</a>
+        <a class="btn" id="shRd" target="_blank" rel="noopener">Reddit</a>
+        <button class="btn" id="shCopy" data-t="copyLink"></button>
+      </div>
+      <div>
+        <h3 style="margin-bottom:14px"><span data-t="comments"></span> <span class="muted" id="dCount"></span></h3>
+        <div class="comments" id="dComments"></div>
+      </div>
+      <form id="cForm" style="display:grid;gap:8px">
+        <label for="cText" class="muted" style="font-size:.9rem" data-t="writeComment"></label>
+        <textarea id="cText" style="min-height:70px"></textarea>
+        <button class="btn primary" style="justify-self:start" data-t="postComment"></button>
+      </form>
+    </div>
+  </div>
+</dialog>
+
+<!-- Entrar / registrarse -->
+<dialog id="login" class="small">
+  <div class="dlg-pad" style="position:relative">
+    <button class="close" data-close aria-label="Cerrar"><svg><use href="#i-x"/></svg></button>
+    <h2 style="font-size:2.6rem" data-t="joinTitle"></h2>
+    <p class="muted" data-t="joinText"></p>
+    <div class="field"><label for="lgEmail" data-t="email"></label><input type="email" id="lgEmail" value="mika@ejemplo.com"></div>
+    <div class="field"><label for="lgPass" data-t="password"></label><input type="password" id="lgPass" value="demo1234"></div>
+    <button class="btn primary" id="lgGo" data-t="createAccount"></button>
+    <button class="btn" id="lgGo2" data-t="haveAccount"></button>
+  </div>
+</dialog>
+
+<div class="demo" role="group" aria-label="Boceto">
+  <span data-t="viewAs"></span>
+  <button data-role="guest" data-t="rGuest"></button>
+  <button data-role="fan" data-t="rFan"></button>
+  <button data-role="artist">Zaber</button>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const T = {
+  es: {
+    ageTitle: "Contenido para adultos", ageText: "Esta galería incluye ilustraciones +18. Para entrar confirma que eres mayor de edad en tu país.",
+    ageYes: "Tengo 18 años o más", ageNo: "Salir", ageBye: "Vuelve cuando quieras. Las obras sin marca +18 se pueden ver en las redes de Zaber.",
+    navGallery: "Galería", navCommissions: "Comisiones", navMessages: "Mensajes", navPanel: "Mi panel",
+    logIn: "Entrar", bio: "Ilustración 2D de personajes. Dibujo lo que me pidas, también +18. Comisiones abiertas.",
+    ctaCommission: "Pedir una comisión", works: "Obras", fAll: "Todo", fSfw: "Para todo público", fSaved: "Guardadas",
+    reveal: "Toca para ver", sample: "Obra de ejemplo", emptySaved: "Aún no has guardado ninguna obra. Pulsa Guardar en una ficha y aparecerá aquí.",
+    save: "Guardar", saved: "Guardada", share: "Compartir", copyLink: "Copiar enlace", copied: "Enlace copiado",
+    comments: "Comentarios", writeComment: "Escribe un comentario", postComment: "Publicar comentario", posted: "Comentario publicado",
+    open: "Comisiones abiertas", comTitle: "Pide tu dibujo",
+    comIntro: "No hay precios fijos: cada encargo se presupuesta según lo que pidas. Cuéntame la idea y te respondo por mensaje.",
+    s1: "Envías tu idea", s1d: "Describe el personaje, la escena y añade referencias.",
+    s2: "Recibes un presupuesto", s2d: "Te contesto con precio y plazo en tus mensajes.",
+    s3: "Aceptas y empiezo", s3d: "Te enseño el boceto antes de pasar a color.",
+    s4: "Entrega final", s4d: "Recibes el archivo en alta resolución.",
+    comFormTitle: "Cuéntame qué quieres", cType: "Tipo de dibujo", cTypes: ["Personaje solo","Dos personajes o más","Escena con fondo","Boceto rápido","Otra cosa"],
+    cDesc: "Descripción", cDescHelp: "Personaje, pose, ropa, expresión, lo que tengas claro.", cRefs: "Referencias",
+    cDrop: "Arrastra imágenes aquí o pulsa para elegirlas", cUse: "Uso", cUses: ["Personal","Comercial"],
+    cBudget: "Presupuesto aproximado (opcional)", cNsfw: "Es un encargo +18", send: "Enviar pedido",
+    sent: "Pedido enviado. Te llegará el presupuesto a Mensajes.",
+    needAccount: "Necesitas una cuenta para pedir comisiones", needAccountMsg: "Necesitas una cuenta para escribir a Zaber",
+    needAccountText: "Mirar la galería es libre. Para pedir encargos y hablar por privado, crea una cuenta gratis.",
+    createAccount: "Crear cuenta", haveAccount: "Ya tengo cuenta",
+    joinTitle: "Únete", joinText: "Con una cuenta puedes dar me gusta, comentar, guardar obras, escribir a Zaber y pedir comisiones.",
+    email: "Correo", password: "Contraseña", welcome: "Sesión iniciada",
+    typeMsg: "Escribe un mensaje", sendMsg: "Enviar",
+    panelTitle: "Mi panel", stLikes: "me gusta este mes", stFollowers: "cuentas registradas", stReq: "pedidos nuevos", stMsg: "mensajes sin leer",
+    upTitle: "Subir obra", upDrop: "Arrastra la imagen aquí o pulsa para elegirla", upNameEs: "Título en español", upNameEn: "Título en inglés",
+    upDesc: "Descripción", upNsfw: "Marcar como +18", upNsfwHelp: "Se verá difuminada hasta que la persona la abra. Al compartir en redes se usará una vista previa segura.",
+    upComments: "Permitir comentarios", publish: "Publicar", published: "Publicada (en el boceto no se guarda)",
+    reqTitle: "Pedidos de comisión", rWho: "Quién", rWhat: "Qué", rDate: "Fecha", rState: "Estado",
+    stNew: "Nuevo", stQuoted: "Presupuestado", stDoing: "En proceso", stDone: "Entregado",
+    artistBadge: "artista", terms: "Términos", privacy: "Privacidad", viewAs: "Boceto. Ver como:", rGuest: "Visitante", rFan: "Registrado",
+  },
+  en: {
+    ageTitle: "Adult content", ageText: "This gallery includes 18+ illustrations. Confirm you are of legal age in your country to enter.",
+    ageYes: "I am 18 or older", ageNo: "Leave", ageBye: "Come back any time. Works without the 18+ mark are on Zaber's social accounts.",
+    navGallery: "Gallery", navCommissions: "Commissions", navMessages: "Messages", navPanel: "My dashboard",
+    logIn: "Log in", bio: "2D character illustration. I draw what you ask for, 18+ included. Commissions are open.",
+    ctaCommission: "Request a commission", works: "Works", fAll: "All", fSfw: "Safe for work", fSaved: "Saved",
+    reveal: "Tap to view", sample: "Sample work", emptySaved: "You haven't saved any works yet. Press Save on a work and it will show up here.",
+    save: "Save", saved: "Saved", share: "Share", copyLink: "Copy link", copied: "Link copied",
+    comments: "Comments", writeComment: "Write a comment", postComment: "Post comment", posted: "Comment posted",
+    open: "Commissions open", comTitle: "Request your drawing",
+    comIntro: "There are no fixed prices: every piece is quoted based on what you ask for. Tell me your idea and I'll reply by message.",
+    s1: "Send your idea", s1d: "Describe the character and scene, and add references.",
+    s2: "Get a quote", s2d: "I reply with price and timeline in your messages.",
+    s3: "Accept and I start", s3d: "You see the sketch before I move to color.",
+    s4: "Final delivery", s4d: "You get the high-resolution file.",
+    comFormTitle: "Tell me what you want", cType: "Type of drawing", cTypes: ["Single character","Two or more characters","Scene with background","Quick sketch","Something else"],
+    cDesc: "Description", cDescHelp: "Character, pose, outfit, expression, whatever you have in mind.", cRefs: "References",
+    cDrop: "Drag images here or click to choose", cUse: "Use", cUses: ["Personal","Commercial"],
+    cBudget: "Rough budget (optional)", cNsfw: "This is an 18+ commission", send: "Send request",
+    sent: "Request sent. Your quote will arrive in Messages.",
+    needAccount: "You need an account to request commissions", needAccountMsg: "You need an account to message Zaber",
+    needAccountText: "Browsing the gallery is free. To request commissions and send private messages, create a free account.",
+    createAccount: "Create account", haveAccount: "I already have an account",
+    joinTitle: "Join", joinText: "With an account you can like, comment, save works, message Zaber and request commissions.",
+    email: "Email", password: "Password", welcome: "Logged in",
+    typeMsg: "Write a message", sendMsg: "Send",
+    panelTitle: "My dashboard", stLikes: "likes this month", stFollowers: "registered accounts", stReq: "new requests", stMsg: "unread messages",
+    upTitle: "Upload work", upDrop: "Drag the image here or click to choose", upNameEs: "Title in Spanish", upNameEn: "Title in English",
+    upDesc: "Description", upNsfw: "Mark as 18+", upNsfwHelp: "It stays blurred until someone opens it. Social shares use a safe preview.",
+    upComments: "Allow comments", publish: "Publish", published: "Published (the sketch doesn't store it)",
+    reqTitle: "Commission requests", rWho: "Who", rWhat: "What", rDate: "Date", rState: "Status",
+    stNew: "New", stQuoted: "Quoted", stDoing: "In progress", stDone: "Delivered",
+    artistBadge: "artist", terms: "Terms", privacy: "Privacy", viewAs: "Sketch. View as:", rGuest: "Visitor", rFan: "Member",
+  }
+};
+
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+};
+const detectLang = () => ((navigator.languages && navigator.languages[0]) || navigator.language || "en").toLowerCase().startsWith("es") ? "es" : "en";
+const S = { lang: store.get("zaber-lang") || detectLang(), role: "guest", filter: "all", liked: new Set(), saved: new Set(), revealed: new Set(), current: null, thread: 0 };
+const t = k => T[S.lang][k] ?? k;
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// Obras de ejemplo: la primera es la ilustración real; el resto son manchas de color con la paleta del personaje.
+const WORKS = [
+  { id: "w1", img: "avatar.jpg", ratio: "1/1", nsfw: false, likes: 1243, date: "2026-10-02", title: { es: "Filtro violeta", en: "Violet filter" }, desc: { es: "Retrato con máscara de gas. Mi personaje principal.", en: "Portrait with a gas mask. My main character." } },
+  { id: "w2", ratio: "3/4", nsfw: true, likes: 2210, date: "2026-09-27", title: { es: "Después del turno", en: "After the shift" }, desc: { es: "Encargo privado, publicado con permiso.", en: "Private commission, shared with permission." }, art: 1 },
+  { id: "w3", ratio: "4/5", nsfw: false, likes: 640, date: "2026-09-18", title: { es: "Boceto de pelo", en: "Hair study" }, desc: { es: "Estudio rápido de movimiento.", en: "Quick motion study." }, art: 2 },
+  { id: "w4", ratio: "2/3", nsfw: true, likes: 3105, date: "2026-09-09", title: { es: "Neón en la bañera", en: "Neon bathtub" }, desc: { es: "Serie de luces violetas, parte 2.", en: "Violet light series, part 2." }, art: 3 },
+  { id: "w5", ratio: "16/10", nsfw: false, likes: 812, date: "2026-08-30", title: { es: "Azotea", en: "Rooftop" }, desc: { es: "Escena con fondo para un encargo.", en: "Background scene for a commission." }, art: 4 },
+  { id: "w6", ratio: "3/4", nsfw: false, likes: 455, date: "2026-08-21", title: { es: "Ficha de personaje", en: "Character sheet" }, desc: { es: "Vistas de frente y perfil.", en: "Front and side views." }, art: 5 },
+  { id: "w7", ratio: "4/5", nsfw: true, likes: 1987, date: "2026-08-12", title: { es: "Sin máscara", en: "Unmasked" }, desc: { es: "Lo que hay debajo del filtro.", en: "What's under the filter." }, art: 6 },
+  { id: "w8", ratio: "1/1", nsfw: false, likes: 377, date: "2026-08-03", title: { es: "Icono para Mika", en: "Icon for Mika" }, desc: { es: "Comisión de icono para redes.", en: "Social icon commission." }, art: 7 },
+  { id: "w9", ratio: "2/3", nsfw: false, likes: 902, date: "2026-07-25", title: { es: "Lluvia ácida", en: "Acid rain" }, desc: { es: "Personaje original de un cliente.", en: "A client's original character." }, art: 8 },
+];
+const COMMENTS = {
+  w1: [{ who: "Mika", text: { es: "Esos ojos amarillos con la máscara... perfecto.", en: "Those yellow eyes with the mask... perfect." } }, { who: "Zaber", artist: true, text: { es: "¡Gracias! Es mi personaje favorito.", en: "Thanks! She's my favourite character." } }, { who: "r0nin", text: { es: "¿Habrá versión sin máscara?", en: "Will there be an unmasked version?" } }],
+  w4: [{ who: "Lune", text: { es: "La luz está increíble.", en: "The lighting is incredible." } }],
+};
+function artCSS(n) {
+  const P = ["#8e22b3", "#6c108d", "#b340cf", "#e9d9e4", "#ffd10b", "#2a1433", "#c66acd"];
+  const r = i => ((Math.sin(n * 97.13 + i * 13.7) + 1) / 2);
+  const g = [];
+  for (let i = 0; i < 3; i++) g.push(`radial-gradient(${Math.round(18 + r(i) * 26)}% ${Math.round(18 + r(i + 9) * 26)}% at ${Math.round(15 + r(i + 3) * 70)}% ${Math.round(15 + r(i + 6) * 70)}%, ${P[(n + i) % 7]} 0 58%, transparent 60%)`);
+  return g.join(",") + `, linear-gradient(${Math.round(r(20) * 360)}deg, ${P[(n + 1) % 2]}, #1a0d22)`;
+}
+const fmtDate = d => new Intl.DateTimeFormat(S.lang, { day: "numeric", month: "long", year: "numeric" }).format(new Date(d + "T12:00:00"));
+const fmtNum = n => new Intl.NumberFormat(S.lang).format(n);
+const likes = w => w.likes + (S.liked.has(w.id) ? 1 : 0);
+const canSeeNsfw = w => !w.nsfw || S.revealed.has(w.id);
+
+function picHTML(w) {
+  const st = `aspect-ratio:${w.ratio};max-width:100%`;
+  return w.img ? `<img src="${w.img}" alt="${esc(w.title[S.lang])}" style="${st}">` : `<div style="${st};background:${artCSS(w.art)}" role="img" aria-label="${esc(w.title[S.lang])}"></div>`;
+}
+
+function renderWall() {
+  let list = WORKS;
+  if (S.filter === "sfw") list = list.filter(w => !w.nsfw);
+  if (S.filter === "nsfw") list = list.filter(w => w.nsfw);
+  if (S.filter === "saved") list = list.filter(w => S.saved.has(w.id));
+  $("#wall").innerHTML = list.map(w => {
+    const hide = !canSeeNsfw(w);
+    return `<button class="tile" data-id="${w.id}">
+      <div class="art">${w.nsfw ? '<span class="tag18">+18</span>' : ""}
+        <div class="frame ${hide ? "blurred" : ""}">${picHTML(w)}</div>
+        ${hide ? `<div class="veil"><span><b>+18</b>${t("reveal")}</span></div>` : ""}
+        ${w.img ? "" : `<span class="sample">${t("sample")}</span>`}
+      </div>
+      <div class="cap"><span>${esc(w.title[S.lang])}</span><span><svg><use href="#i-heart"/></svg>${fmtNum(likes(w))}</span></div>
+    </button>`;
+  }).join("");
+  $("#wallEmpty").hidden = list.length > 0;
+  $("#wallEmpty").textContent = t("emptySaved");
+}
+
+function openDetail(id) {
+  const w = WORKS.find(x => x.id === id); S.current = w; S.revealed.add(id);
+  $("#dPic").innerHTML = picHTML(w);
+  $("#dTitle").textContent = w.title[S.lang];
+  $("#dDate").textContent = fmtDate(w.date) + (w.nsfw ? "   +18" : "");
+  $("#dDesc").textContent = w.desc[S.lang];
+  $("#dLike").setAttribute("aria-pressed", S.liked.has(id));
+  $("#dLikes").textContent = fmtNum(likes(w));
+  $("#dSave").setAttribute("aria-pressed", S.saved.has(id));
+  $("#dSave span").textContent = S.saved.has(id) ? t("saved") : t("save");
+  $("#shareBox").hidden = true; $("#dShare").setAttribute("aria-expanded", "false");
+  const url = encodeURIComponent("https://zaber.art/obra/" + id), txt = encodeURIComponent(w.title[S.lang] + " de Zaber");
+  $("#shX").href = `https://x.com/intent/post?text=${txt}&url=${url}`;
+  $("#shBs").href = `https://bsky.app/intent/compose?text=${txt}%20${url}`;
+  $("#shRd").href = `https://www.reddit.com/submit?url=${url}&title=${txt}`;
+  renderComments();
+  if (!$("#detail").open) $("#detail").showModal();
+  renderWall();
+}
+function renderComments() {
+  const list = COMMENTS[S.current.id] || [];
+  $("#dCount").textContent = list.length;
+  $("#dComments").innerHTML = list.map(c => `<div class="comment"><div class="av ${c.artist ? "artist" : ""}">${esc(c.who[0])}</div><div><div class="who"><b>${esc(c.who)}</b>${c.artist ? `<span class="badge">${t("artistBadge")}</span>` : ""}</div><p>${esc(typeof c.text === "string" ? c.text : c.text[S.lang])}</p></div></div>`).join("");
+}
+
+function needLogin() { if (S.role === "guest") { $("#login").showModal(); return true; } return false; }
+function toast(msg) { const el = $("#toast"); el.textContent = msg; el.hidden = false; clearTimeout(el._t); el._t = setTimeout(() => el.hidden = true, 2400); }
+
+function renderCommission() {
+  const box = $("#comSide");
+  if (S.role === "guest") {
+    box.innerHTML = `<div class="gate-note"><h3>${t("needAccount")}</h3><p class="muted">${t("needAccountText")}</p><button class="btn primary" data-open-login>${t("createAccount")}</button></div>`;
+    return;
+  }
+  box.innerHTML = `<form class="card" id="comForm">
+    <h3>${t("comFormTitle")}</h3>
+    <div class="field"><label for="cfType">${t("cType")}</label><select id="cfType">${t("cTypes").map(o => `<option>${o}</option>`).join("")}</select></div>
+    <div class="field"><label for="cfDesc">${t("cDesc")}</label><textarea id="cfDesc"></textarea><small>${t("cDescHelp")}</small></div>
+    <div class="field"><span class="field"><label for="cfRefs">${t("cRefs")}</label></span><label class="drop" for="cfRefs">${t("cDrop")}</label><input type="file" id="cfRefs" multiple accept="image/*" hidden></div>
+    <div class="row2">
+      <div class="field"><label for="cfUse">${t("cUse")}</label><select id="cfUse">${t("cUses").map(o => `<option>${o}</option>`).join("")}</select></div>
+      <div class="field"><label for="cfBudget">${t("cBudget")}</label><input type="text" id="cfBudget" placeholder="50 USD"></div>
+    </div>
+    <label class="check"><input type="checkbox" id="cfNsfw"><span>${t("cNsfw")}</span></label>
+    <button class="btn primary" style="justify-self:start">${t("send")}</button>
+  </form>`;
+  $("#comForm").addEventListener("submit", e => { e.preventDefault(); toast(t("sent")); e.target.reset(); });
+}
+
+const THREADS = [
+  { who: "Mika", msgs: [
+    { me: false, text: { es: "¡Hola! Te mandé un pedido de comisión para mi OC.", en: "Hi! I sent you a commission request for my OC." }, at: "10:12" },
+    { me: true, text: { es: "¡Lo vi! Te paso presupuesto hoy.", en: "Saw it! I'll send you a quote today." }, at: "10:40" },
+    { me: false, text: { es: "Genial, sin prisa.", en: "Great, no rush." }, at: "10:41" } ] },
+  { who: "r0nin", msgs: [ { me: false, text: { es: "¿Aceptas encargos de fondos solos?", en: "Do you take background-only work?" }, at: "ayer" } ] },
+  { who: "Lune", msgs: [ { me: false, text: { es: "Me encantó la serie de neón.", en: "Loved the neon series." }, at: "lun" } ] },
+];
+function renderMessages() {
+  const box = $("#msgSide");
+  if (S.role === "guest") {
+    box.innerHTML = `<div class="gate-note" style="max-width:520px"><h3>${t("needAccountMsg")}</h3><p class="muted">${t("needAccountText")}</p><button class="btn primary" data-open-login>${t("createAccount")}</button></div>`;
+    return;
+  }
+  // Un fan solo ve su conversación con Zaber; Zaber ve la bandeja completa.
+  const threads = S.role === "artist" ? THREADS : [{ who: "Zaber", msgs: THREADS[0].msgs.map(m => ({ ...m, me: !m.me })) }];
+  const th = threads[Math.min(S.thread, threads.length - 1)];
+  box.innerHTML = `<div class="inbox">
+    <div class="threads">${threads.map((x, i) => `<button data-thread="${i}" aria-current="${x === th}"><span class="av">${x.who[0]}</span><span><b>${x.who}</b><small>${esc(x.msgs[x.msgs.length - 1].text[S.lang])}</small></span></button>`).join("")}</div>
+    <div class="thread">
+      <div class="msgs">${th.msgs.map(m => `<div class="msg ${m.me ? "mine" : ""}">${esc(typeof m.text === "string" ? m.text : m.text[S.lang])}<time>${m.at}</time></div>`).join("")}</div>
+      <form class="compose" id="compose"><label for="msgIn" hidden>${t("typeMsg")}</label><input type="text" id="msgIn" placeholder="${t("typeMsg")}"><button class="btn primary">${t("sendMsg")}</button></form>
+    </div></div>`;
+  $("#compose").addEventListener("submit", e => {
+    e.preventDefault(); const v = $("#msgIn").value.trim(); if (!v) return;
+    const target = S.role === "artist" ? th : THREADS[0];
+    target.msgs.push({ me: S.role === "artist", text: v, at: new Intl.DateTimeFormat(S.lang, { hour: "2-digit", minute: "2-digit" }).format(new Date()) });
+    renderMessages(); $("#msgIn").focus();
+  });
+}
+
+const REQS = [
+  { who: "Mika", what: { es: "Personaje solo, +18", en: "Single character, 18+" }, date: "2026-10-16", st: "new" },
+  { who: "r0nin", what: { es: "Escena con fondo", en: "Scene with background" }, date: "2026-10-14", st: "quoted" },
+  { who: "Lune", what: { es: "Dos personajes", en: "Two characters" }, date: "2026-10-05", st: "doing" },
+  { who: "Kai", what: { es: "Icono", en: "Icon" }, date: "2026-09-22", st: "done" },
+];
+function renderPanel() {
+  const stLabel = { new: "stNew", quoted: "stQuoted", doing: "stDoing", done: "stDone" };
+  $("#stats").innerHTML = [[fmtNum(4820), "stLikes"], [fmtNum(1312), "stFollowers"], ["1", "stReq"], ["2", "stMsg"]].map(([n, k]) => `<div><b>${n}</b><span>${t(k)}</span></div>`).join("");
+  $("#reqTable").innerHTML = `<thead><tr><th>${t("rWho")}</th><th>${t("rWhat")}</th><th>${t("rDate")}</th><th>${t("rState")}</th></tr></thead><tbody>` +
+    REQS.map(r => `<tr><td>${r.who}</td><td>${r.what[S.lang]}</td><td>${fmtDate(r.date)}</td><td><span class="pill ${r.st}">${t(stLabel[r.st])}</span></td></tr>`).join("") + "</tbody>";
+}
+
+function route() {
+  let r = location.hash.slice(1) || "galeria";
+  if (r === "panel" && S.role !== "artist") r = "galeria";
+  if (!document.querySelector(`[data-view="${r}"]`)) r = "galeria";
+  document.querySelectorAll("[data-view]").forEach(v => v.hidden = v.dataset.view !== r);
+  document.querySelectorAll("nav.main a").forEach(a => a.dataset.route === r ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
+  if (r === "comisiones") renderCommission();
+  if (r === "mensajes") renderMessages();
+  if (r === "panel") renderPanel();
+  window.scrollTo(0, 0);
+}
+
+function applyLang() {
+  document.documentElement.lang = S.lang;
+  document.querySelectorAll("[data-t]").forEach(el => el.textContent = t(el.dataset.t));
+  document.querySelectorAll("[data-lang]").forEach(b => b.setAttribute("aria-pressed", b.dataset.lang === S.lang));
+  renderWall(); route();
+  if ($("#detail").open) openDetail(S.current.id);
+}
+function applyRole() {
+  document.querySelectorAll("[data-role]").forEach(b => b.setAttribute("aria-pressed", b.dataset.role === S.role));
+  $("#navPanel").hidden = S.role !== "artist";
+  $("#unread").hidden = S.role !== "artist";
+  $("#loginBtn").hidden = S.role !== "guest";
+  $("#meAv").hidden = S.role === "guest";
+  $("#meAv").src = S.role === "artist" ? "avatar.jpg" : "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 34 34"><rect width="34" height="34" fill="#36233f"/><text x="17" y="22" font-family="sans-serif" font-size="14" font-weight="600" fill="#eee3ec" text-anchor="middle">M</text></svg>');
+  S.thread = 0; route();
+}
+
+// eventos
+$("#wall").addEventListener("click", e => { const b = e.target.closest(".tile"); if (b) openDetail(b.dataset.id); });
+$("#filters").addEventListener("click", e => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  if (b.dataset.f === "saved" && needLogin()) return;
+  S.filter = b.dataset.f;
+  document.querySelectorAll("#filters .chip").forEach(c => c.setAttribute("aria-pressed", c === b));
+  renderWall();
+});
+document.querySelectorAll("[data-lang]").forEach(b => b.addEventListener("click", () => { S.lang = b.dataset.lang; store.set("zaber-lang", S.lang); applyLang(); }));
+document.querySelectorAll("[data-role]").forEach(b => b.addEventListener("click", () => { S.role = b.dataset.role; applyRole(); }));
+document.addEventListener("click", e => {
+  if (e.target.closest("[data-close]")) e.target.closest("dialog").close();
+  if (e.target.closest("[data-open-login]")) $("#login").showModal();
+  const th = e.target.closest("[data-thread]"); if (th) { S.thread = +th.dataset.thread; renderMessages(); }
+});
+document.querySelectorAll("dialog").forEach(d => d.addEventListener("click", e => { if (e.target === d) d.close(); }));
+$("#loginBtn").addEventListener("click", () => $("#login").showModal());
+[$("#lgGo"), $("#lgGo2")].forEach(b => b.addEventListener("click", () => { $("#login").close(); S.role = "fan"; applyRole(); toast(t("welcome")); }));
+$("#dLike").addEventListener("click", () => {
+  if (needLogin()) return; const id = S.current.id;
+  S.liked.has(id) ? S.liked.delete(id) : S.liked.add(id); openDetail(id);
+});
+$("#dSave").addEventListener("click", () => {
+  if (needLogin()) return; const id = S.current.id;
+  S.saved.has(id) ? S.saved.delete(id) : S.saved.add(id); openDetail(id);
+});
+$("#dShare").addEventListener("click", () => { const box = $("#shareBox"); box.hidden = !box.hidden; $("#dShare").setAttribute("aria-expanded", String(!box.hidden)); });
+$("#shCopy").addEventListener("click", () => {
+  const link = "https://zaber.art/obra/" + S.current.id;
+  navigator.clipboard?.writeText(link).then(() => toast(t("copied")), () => toast(link));
+});
+$("#cForm").addEventListener("submit", e => {
+  e.preventDefault(); if (needLogin()) return;
+  const v = $("#cText").value.trim(); if (!v) return;
+  (COMMENTS[S.current.id] ||= []).push({ who: S.role === "artist" ? "Zaber" : "Mika", artist: S.role === "artist", text: v });
+  $("#cText").value = ""; renderComments(); toast(t("posted"));
+});
+$("#uploadForm").addEventListener("submit", e => { e.preventDefault(); toast(t("published")); });
+window.addEventListener("hashchange", route);
+
+// aviso de edad
+if (store.get("zaber-18") !== "yes") $("#age").hidden = false;
+$("#ageYes").addEventListener("click", () => { store.set("zaber-18", "yes"); $("#age").hidden = true; });
+$("#ageNo").addEventListener("click", () => { $("#ageBye").hidden = false; });
+
+applyLang(); applyRole();
+</script>
