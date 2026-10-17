@@ -1,0 +1,33 @@
+{
+  "name": "zaber-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "migrate": "node src/migrate.js",
+    "create-artist": "node scripts/create-artist.js",
+    "seed:demo": "node scripts/seed-demo.js",
+    "test": "node --test --test-concurrency=1 \"test/**/*.test.js\""
+  },
+  "dependencies": {
+    "@node-rs/argon2": "^2.2.2",
+    "cookie-parser": "^1.4.7",
+    "express": "^4.22.3",
+    "express-rate-limit": "^8.7.1",
+    "helmet": "^8.3.0",
+    "multer": "^2.4.0",
+    "nodemailer": "^10.1.2",
+    "pg": "^8.23.1",
+    "sharp": "^0.35.5",
+    "ws": "^8.22.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "supertest": "^7.3.1"
+  }
+}
